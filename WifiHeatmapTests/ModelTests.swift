@@ -46,6 +46,10 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(decoded.position.y, sample.position.y, accuracy: 0.001)
         XCTAssertEqual(decoded.rssi, sample.rssi)
         XCTAssertEqual(decoded.band, sample.band)
+        XCTAssertEqual(decoded.timestamp, sample.timestamp)
+        XCTAssertEqual(decoded.ssid, sample.ssid)
+        XCTAssertEqual(decoded.bssid, sample.bssid)
+        XCTAssertEqual(decoded.noise, sample.noise)
     }
 
     func testCalibrationMetersPerPixel() {
