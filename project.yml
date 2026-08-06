@@ -1,0 +1,80 @@
+name: WifiHeatmap
+options:
+  bundleIdPrefix: com.yourname
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "15"
+  createIntermediateGroups: true
+
+targets:
+  WifiHeatmap:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: WifiHeatmap
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yourname.wifiheatmap
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: WifiHeatmap/WifiHeatmap.entitlements
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "WiFi Heatmap needs location access to read WiFi access point details."
+    info:
+      path: WifiHeatmap/Info.plist
+      properties:
+        CFBundleName: WifiHeatmap
+        CFBundleDisplayName: WiFi Heatmap
+        CFBundleIdentifier: com.yourname.wifiheatmap
+        CFBundleVersion: "1"
+        CFBundleShortVersionString: "1.0"
+        NSLocationWhenInUseUsageDescription: "WiFi Heatmap needs location access to read WiFi access point details."
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: WiFi Survey
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - com.yourname.wifiheatmap
+            LSTypeIsPackage: true
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.yourname.wifiheatmap
+            UTTypeDescription: WiFi Survey
+            UTTypeConformsTo:
+              - com.apple.package
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - wifiheatmap
+
+  WifiHeatmapTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: WifiHeatmapTests
+    dependencies:
+      - target: WifiHeatmap
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yourname.wifiheatmaptests
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+schemes:
+  WifiHeatmap:
+    build:
+      targets:
+        WifiHeatmap: all
+        WifiHeatmapTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - WifiHeatmapTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

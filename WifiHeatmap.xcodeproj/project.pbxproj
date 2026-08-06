@@ -1,0 +1,398 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		5AB8D975CD5CD18497F52DE6 /* WifiHeatmapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DE565D6241B6049924027BE /* WifiHeatmapTests.swift */; };
+		9CEAD7BACCC9F2F2EEA978C8 /* WifiHeatmapApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837E7BDF7E4D341C94A7CF8E /* WifiHeatmapApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		90C928B8E10FE54F4EBF85EB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 53797911B5BDECAFE7786EEE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3A235A288836E66B33222883;
+			remoteInfo = WifiHeatmap;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		606187A431D445BFCB52467B /* WifiHeatmapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WifiHeatmapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		76F3E1DE1E6FBB76B8495C0F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7DE565D6241B6049924027BE /* WifiHeatmapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WifiHeatmapTests.swift; sourceTree = "<group>"; };
+		837E7BDF7E4D341C94A7CF8E /* WifiHeatmapApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WifiHeatmapApp.swift; sourceTree = "<group>"; };
+		9208E124B0A7C6A384D8F78C /* WifiHeatmap.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WifiHeatmap.entitlements; sourceTree = "<group>"; };
+		C1388F931290EEF63CAC588A /* WifiHeatmap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WifiHeatmap.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		5D667554C329936143CB0E52 = {
+			isa = PBXGroup;
+			children = (
+				9D04F6660A5D06DB8A2EF501 /* WifiHeatmap */,
+				EC5AC9D5478E158E8C427C89 /* WifiHeatmapTests */,
+				F7998FA221C5BFDD27A00966 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9D04F6660A5D06DB8A2EF501 /* WifiHeatmap */ = {
+			isa = PBXGroup;
+			children = (
+				76F3E1DE1E6FBB76B8495C0F /* Info.plist */,
+				9208E124B0A7C6A384D8F78C /* WifiHeatmap.entitlements */,
+				837E7BDF7E4D341C94A7CF8E /* WifiHeatmapApp.swift */,
+			);
+			path = WifiHeatmap;
+			sourceTree = "<group>";
+		};
+		EC5AC9D5478E158E8C427C89 /* WifiHeatmapTests */ = {
+			isa = PBXGroup;
+			children = (
+				7DE565D6241B6049924027BE /* WifiHeatmapTests.swift */,
+			);
+			path = WifiHeatmapTests;
+			sourceTree = "<group>";
+		};
+		F7998FA221C5BFDD27A00966 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C1388F931290EEF63CAC588A /* WifiHeatmap.app */,
+				606187A431D445BFCB52467B /* WifiHeatmapTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3977ED7703F1A67B00B05853 /* WifiHeatmapTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B2AD01112A1F8EAC17803F29 /* Build configuration list for PBXNativeTarget "WifiHeatmapTests" */;
+			buildPhases = (
+				2DF5C5E72EFEC2FDA419984B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				55E7A1D3C11B44FC6E49F1E1 /* PBXTargetDependency */,
+			);
+			name = WifiHeatmapTests;
+			packageProductDependencies = (
+			);
+			productName = WifiHeatmapTests;
+			productReference = 606187A431D445BFCB52467B /* WifiHeatmapTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		3A235A288836E66B33222883 /* WifiHeatmap */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 875A598267D8425394FB6BDB /* Build configuration list for PBXNativeTarget "WifiHeatmap" */;
+			buildPhases = (
+				F2217343BD6807CEDEFDD144 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WifiHeatmap;
+			packageProductDependencies = (
+			);
+			productName = WifiHeatmap;
+			productReference = C1388F931290EEF63CAC588A /* WifiHeatmap.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		53797911B5BDECAFE7786EEE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					3A235A288836E66B33222883 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 59460876C63852942BB5C59B /* Build configuration list for PBXProject "WifiHeatmap" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5D667554C329936143CB0E52;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = F7998FA221C5BFDD27A00966 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3A235A288836E66B33222883 /* WifiHeatmap */,
+				3977ED7703F1A67B00B05853 /* WifiHeatmapTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2DF5C5E72EFEC2FDA419984B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5AB8D975CD5CD18497F52DE6 /* WifiHeatmapTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F2217343BD6807CEDEFDD144 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9CEAD7BACCC9F2F2EEA978C8 /* WifiHeatmapApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		55E7A1D3C11B44FC6E49F1E1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3A235A288836E66B33222883 /* WifiHeatmap */;
+			targetProxy = 90C928B8E10FE54F4EBF85EB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0DC04B0013F61085EF310B4A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.wifiheatmaptests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WifiHeatmap.app/Contents/MacOS/WifiHeatmap";
+			};
+			name = Debug;
+		};
+		5001C223AA15C58981106C25 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = WifiHeatmap/WifiHeatmap.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = WifiHeatmap/Info.plist;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "WiFi Heatmap needs location access to read WiFi access point details.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.wifiheatmap;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		50FDE94CBA2712EF3E9F7D37 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A2993D4D64EE52BD22D8C647 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.wifiheatmaptests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WifiHeatmap.app/Contents/MacOS/WifiHeatmap";
+			};
+			name = Release;
+		};
+		BAA2CAFAF7DE2BC455033962 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E736D9CCE996D1B67BA95344 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = WifiHeatmap/WifiHeatmap.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = WifiHeatmap/Info.plist;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "WiFi Heatmap needs location access to read WiFi access point details.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yourname.wifiheatmap;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		59460876C63852942BB5C59B /* Build configuration list for PBXProject "WifiHeatmap" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				50FDE94CBA2712EF3E9F7D37 /* Debug */,
+				BAA2CAFAF7DE2BC455033962 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		875A598267D8425394FB6BDB /* Build configuration list for PBXNativeTarget "WifiHeatmap" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E736D9CCE996D1B67BA95344 /* Debug */,
+				5001C223AA15C58981106C25 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B2AD01112A1F8EAC17803F29 /* Build configuration list for PBXNativeTarget "WifiHeatmapTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0DC04B0013F61085EF310B4A /* Debug */,
+				A2993D4D64EE52BD22D8C647 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 53797911B5BDECAFE7786EEE /* Project object */;
+}
