@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		05434F656996ADBEE7CB988A /* ScannedNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04165CB834D74B4C3244FAF3 /* ScannedNetwork.swift */; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* LocationAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6B7C8D9E0F1A2 /* LocationAuthManager.swift */; };
+		C3D4E5F6A7B8C9D0E1F2A3B4 /* ScanActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6A7B8C9D0E1F2A3B4C5 /* ScanActor.swift */; };
 		061DE7657E5733CC0EE64FBD /* WifiSurvey.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9177E3486DE4608914CE25 /* WifiSurvey.swift */; };
 		2809D466E0DBDA2207BF6244 /* WifiSurveyDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 345125B88C3FEC37F35C9DDA /* WifiSurveyDocument.swift */; };
 		3B1C157B6D9D976524ABE726 /* WifiSample.swift in Sources */ = {isa = PBXBuildFile; fileRef = 541035A6958EB0CEE3C79F44 /* WifiSample.swift */; };
@@ -46,6 +48,8 @@
 		C1388F931290EEF63CAC588A /* WifiHeatmap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WifiHeatmap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E77F3E4270FABCD6DC84DEFE /* Floor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Floor.swift; sourceTree = "<group>"; };
 		FD1DD8456355428BEE8750C2 /* WiFiBand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiBand.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5A6B7C8D9E0F1A2 /* LocationAuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationAuthManager.swift; sourceTree = "<group>"; };
+		D4E5F6A7B8C9D0E1F2A3B4C5 /* ScanActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanActor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -65,8 +69,18 @@
 				9208E124B0A7C6A384D8F78C /* WifiHeatmap.entitlements */,
 				837E7BDF7E4D341C94A7CF8E /* WifiHeatmapApp.swift */,
 				FD7E60AEE66C57D6D6009BD6 /* Models */,
+				E1F2A3B4C5D6E7F8A9B0C1D2 /* Scanning */,
 			);
 			path = WifiHeatmap;
+			sourceTree = "<group>";
+		};
+		E1F2A3B4C5D6E7F8A9B0C1D2 /* Scanning */ = {
+			isa = PBXGroup;
+			children = (
+				B1C2D3E4F5A6B7C8D9E0F1A2 /* LocationAuthManager.swift */,
+				D4E5F6A7B8C9D0E1F2A3B4C5 /* ScanActor.swift */,
+			);
+			path = Scanning;
 			sourceTree = "<group>";
 		};
 		EC5AC9D5478E158E8C427C89 /* WifiHeatmapTests */ = {
@@ -191,7 +205,9 @@
 			files = (
 				5908562A1682E974B17A2252 /* Calibration.swift in Sources */,
 				6269A99478B3B6BC8A1EE904 /* Floor.swift in Sources */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* LocationAuthManager.swift in Sources */,
 				05434F656996ADBEE7CB988A /* ScannedNetwork.swift in Sources */,
+				C3D4E5F6A7B8C9D0E1F2A3B4 /* ScanActor.swift in Sources */,
 				BB09945F2C385EC53126178D /* WiFiBand.swift in Sources */,
 				9CEAD7BACCC9F2F2EEA978C8 /* WifiHeatmapApp.swift in Sources */,
 				3B1C157B6D9D976524ABE726 /* WifiSample.swift in Sources */,
