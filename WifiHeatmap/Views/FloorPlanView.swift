@@ -28,8 +28,10 @@ struct FloorPlanView: View {
                     Color.clear
                         .contentShape(Rectangle())
                         .onTapGesture { loc in
-                            let px = loc.x / geo.size.width  * imageNaturalSize.width
-                            let py = loc.y / geo.size.height * imageNaturalSize.height
+                            let rect = imageRect(in: geo.size)
+                            guard rect.contains(loc) else { return }
+                            let px = (loc.x - rect.origin.x) / rect.size.width  * imageNaturalSize.width
+                            let py = (loc.y - rect.origin.y) / rect.size.height * imageNaturalSize.height
                             onTap(CGPoint(x: px, y: py))
                         }
                 }
@@ -38,6 +40,24 @@ struct FloorPlanView: View {
         .onChange(of: floor.samples.count) { _ in recomputeHeatmap() }
         .onChange(of: activeBand)          { _ in recomputeHeatmap() }
         .onAppear { recomputeHeatmap() }
+        .onDisappear { renderTask?.cancel() }
+    }
+
+    private func imageRect(in viewSize: CGSize) -> CGRect {
+        guard imageNaturalSize.width > 0, imageNaturalSize.height > 0 else {
+            return CGRect(origin: .zero, size: viewSize)
+        }
+        let imageAspect = imageNaturalSize.width / imageNaturalSize.height
+        let viewAspect  = viewSize.width / viewSize.height
+        if imageAspect > viewAspect {
+            // wider than view — letterboxed top/bottom
+            let h = viewSize.width / imageAspect
+            return CGRect(x: 0, y: (viewSize.height - h) / 2, width: viewSize.width, height: h)
+        } else {
+            // taller than view — letterboxed left/right
+            let w = viewSize.height * imageAspect
+            return CGRect(x: (viewSize.width - w) / 2, y: 0, width: w, height: viewSize.height)
+        }
     }
 
     private var imageNaturalSize: CGSize {
