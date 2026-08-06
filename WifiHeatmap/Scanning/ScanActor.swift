@@ -22,7 +22,8 @@ actor ScanActor {
                         continuation.yield(batch)
                     }
                 } catch {
-                    // scan failed; loop immediately to retry
+                    // scan failed; back off before retrying to avoid busy-polling
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s back-off on error
                 }
             }
             continuation.finish()

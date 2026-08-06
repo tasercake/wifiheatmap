@@ -90,8 +90,9 @@ struct FloorPlanView: View {
         guard let cal = floor.calibration else { heatmapImage = nil; return }
         let samples = floor.samples
         let band    = activeBand
+        let imgSize = imageNaturalSize
         renderTask = Task.detached(priority: .userInitiated) {
-            let grid = IDWInterpolator.interpolate(samples: samples, calibration: cal, band: band)
+            let grid = IDWInterpolator.interpolate(samples: samples, calibration: cal, band: band, imageSize: imgSize)
             let img  = HeatmapRenderer.render(grid: grid)
             await MainActor.run { heatmapImage = img }
         }

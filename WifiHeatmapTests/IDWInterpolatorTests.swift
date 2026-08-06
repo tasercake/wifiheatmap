@@ -13,8 +13,11 @@ final class IDWInterpolatorTests: XCTestCase {
     // Floor plan is 200px × 200px = same as gridSize, so pixel ≈ cell
     // (exact mapping is floor plan pixel → normalized grid coordinate)
 
+    // Image size used for tests: 200×200px matches the gridSize so pixel ≈ cell
+    let testImageSize = CGSize(width: 200, height: 200)
+
     func testNoSamplesReturnsAllNil() {
-        let grid = IDWInterpolator.interpolate(samples: [], calibration: cal, band: .ghz5)
+        let grid = IDWInterpolator.interpolate(samples: [], calibration: cal, band: .ghz5, imageSize: testImageSize)
         XCTAssertEqual(grid.count, IDWInterpolator.gridSize)
         XCTAssertEqual(grid[0].count, IDWInterpolator.gridSize)
         XCTAssertTrue(grid.allSatisfy { row in row.allSatisfy { $0 == nil } })
@@ -29,7 +32,7 @@ final class IDWInterpolatorTests: XCTestCase {
             ssid: "Net", bssid: "aa:bb:cc:dd:ee:ff",
             rssi: -60, noise: -90, band: .ghz5
         )
-        let grid = IDWInterpolator.interpolate(samples: [sample], calibration: cal, band: .ghz5)
+        let grid = IDWInterpolator.interpolate(samples: [sample], calibration: cal, band: .ghz5, imageSize: testImageSize)
         // Cell (0,0) should be -60 (the only sample, distance = 0)
         XCTAssertNotNil(grid[0][0])
         XCTAssertEqual(grid[0][0]!, -60, accuracy: 1.0)
@@ -44,12 +47,12 @@ final class IDWInterpolatorTests: XCTestCase {
             rssi: -60, noise: -90, band: .ghz2_4
         )
         // Interpolating for .ghz5 — should find no samples → all nil
-        let grid = IDWInterpolator.interpolate(samples: [sample], calibration: cal, band: .ghz5)
+        let grid = IDWInterpolator.interpolate(samples: [sample], calibration: cal, band: .ghz5, imageSize: testImageSize)
         XCTAssertTrue(grid.allSatisfy { row in row.allSatisfy { $0 == nil } })
     }
 
     func testTwoSamplesInterpolatesCorrectly() {
-        // Two samples at opposite corners, RSSI = -50 and -90
+        // Two samples at opposite corners of the 200×200 image, RSSI = -50 and -90
         // The midpoint cell should have an RSSI between -50 and -90
         let s1 = WifiSample(id: UUID(), position: CGPoint(x: 0,   y: 0),
                             timestamp: .init(timeIntervalSince1970: 0),
@@ -57,13 +60,12 @@ final class IDWInterpolatorTests: XCTestCase {
         let s2 = WifiSample(id: UUID(), position: CGPoint(x: 200, y: 0),
                             timestamp: .init(timeIntervalSince1970: 0),
                             ssid: "N", bssid: "b", rssi: -90, noise: -90, band: .ghz5)
-        let grid = IDWInterpolator.interpolate(samples: [s1, s2], calibration: cal, band: .ghz5)
-        let midCell = grid[0][IDWInterpolator.gridSize / 2]
-        if let v = midCell {
-            XCTAssertGreaterThan(v, -90)
-            XCTAssertLessThan(v, -50)
+        let grid = IDWInterpolator.interpolate(samples: [s1, s2], calibration: cal, band: .ghz5, imageSize: testImageSize)
+        // With 1m/100px calibration and 5m radius, both samples are within range of the center
+        XCTAssertNotNil(grid[0][IDWInterpolator.gridSize / 2], "Center cell must be non-nil when samples bracket the center")
+        if let midCell = grid[0][IDWInterpolator.gridSize / 2] {
+            XCTAssertGreaterThan(midCell, -90)
+            XCTAssertLessThan(midCell, -50)
         }
-        // If midpoint is beyond maxRadius from both, nil is also acceptable —
-        // but with 1m/100px and 5m radius, a 200px-wide image should have coverage
     }
 }

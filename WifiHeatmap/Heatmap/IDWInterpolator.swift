@@ -7,10 +7,13 @@ enum IDWInterpolator {
     /// Returns a gridSize×gridSize row-major grid (grid[row][col]) of interpolated RSSI values.
     /// nil means no sample is within idwMaxRadiusMeters of that cell.
     /// Samples are pre-filtered by `band`.
+    /// The grid is mapped over the full `imageSize` pixel space so it aligns with
+    /// the floor plan image and sample marker overlays.
     static func interpolate(
         samples: [WifiSample],
         calibration: Calibration,
-        band: WiFiBand
+        band: WiFiBand,
+        imageSize: CGSize
     ) -> [[Float?]] {
         let filtered = samples.filter { $0.band == band }
         guard !filtered.isEmpty else {
@@ -20,30 +23,14 @@ enum IDWInterpolator {
         let mpp = calibration.metersPerPixel
         let maxPx = idwMaxRadiusMeters / mpp  // max radius in pixels
 
-        // Determine the floor plan bounds from samples
-        let xs = filtered.map(\.position.x)
-        let ys = filtered.map(\.position.y)
-        let minX = xs.min()!
-        let maxX = xs.max()!
-        let minY = ys.min()!
-        let maxY = ys.max()!
-
-        // Floor plan coordinates span [minX, maxX] × [minY, maxY]
-        // Map this to a gridSize × gridSize grid
-        let floorW = max(maxX - minX, 1.0)
-        let floorH = max(maxY - minY, 1.0)
-
         var grid = Array(repeating: Array(repeating: Optional<Float>.none, count: gridSize),
                          count: gridSize)
 
         for row in 0..<gridSize {
             for col in 0..<gridSize {
-                // Map grid cell to floor plan pixel space
-                let normCol = gridSize > 1 ? Double(col) / Double(gridSize - 1) : 0.0
-                let normRow = gridSize > 1 ? Double(row) / Double(gridSize - 1) : 0.0
-
-                let px = minX + normCol * floorW
-                let py = minY + normRow * floorH
+                // Map grid cell to full floor plan pixel space
+                let px = Double(col) / Double(gridSize - 1) * Double(imageSize.width)
+                let py = Double(row) / Double(gridSize - 1) * Double(imageSize.height)
 
                 var weightSum: Double = 0
                 var valueSum: Double = 0
