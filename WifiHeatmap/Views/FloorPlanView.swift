@@ -1,0 +1,79 @@
+import SwiftUI
+import ImageIO
+
+struct FloorPlanView: View {
+    @ObservedObject var document: WifiSurveyDocument
+    @Binding var floor: Floor
+    let activeBand: WiFiBand
+    let isCalibrating: Bool
+    let onTap: (CGPoint) -> Void
+
+    @State private var heatmapImage: CGImage? = nil
+    @State private var renderTask: Task<Void, Never>? = nil
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                floorPlanImage(geo.size)
+                HeatmapCanvas(image: heatmapImage)
+                SampleMarkersView(
+                    samples: floor.samples.filter { $0.band == activeBand },
+                    imageSize: imageNaturalSize
+                )
+                if isCalibrating {
+                    CalibrationOverlayView(imageSize: geo.size) { cal in
+                        floor.calibration = cal
+                    }
+                } else {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { loc in
+                            let px = loc.x / geo.size.width  * imageNaturalSize.width
+                            let py = loc.y / geo.size.height * imageNaturalSize.height
+                            onTap(CGPoint(x: px, y: py))
+                        }
+                }
+            }
+        }
+        .onChange(of: floor.samples.count) { _ in recomputeHeatmap() }
+        .onChange(of: activeBand)          { _ in recomputeHeatmap() }
+        .onAppear { recomputeHeatmap() }
+    }
+
+    private var imageNaturalSize: CGSize {
+        guard let data = document.imageCache[floor.floorPlanFilename],
+              let src  = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = props[kCGImagePropertyPixelWidth]  as? Int,
+              let h = props[kCGImagePropertyPixelHeight] as? Int
+        else { return CGSize(width: 1000, height: 1000) }
+        return CGSize(width: w, height: h)
+    }
+
+    @ViewBuilder
+    private func floorPlanImage(_ size: CGSize) -> some View {
+        if let data = document.imageCache[floor.floorPlanFilename],
+           let src  = CGImageSourceCreateWithData(data as CFData, nil),
+           let img  = CGImageSourceCreateImageAtIndex(src, 0, nil) {
+            Image(img, scale: 1, label: Text("Floor plan"))
+                .resizable()
+                .scaledToFit()
+        } else {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.2))
+                .overlay(Text("Import a floor plan to get started").foregroundStyle(.secondary))
+        }
+    }
+
+    private func recomputeHeatmap() {
+        renderTask?.cancel()
+        guard let cal = floor.calibration else { heatmapImage = nil; return }
+        let samples = floor.samples
+        let band    = activeBand
+        renderTask = Task.detached(priority: .userInitiated) {
+            let grid = IDWInterpolator.interpolate(samples: samples, calibration: cal, band: band)
+            let img  = HeatmapRenderer.render(grid: grid)
+            await MainActor.run { heatmapImage = img }
+        }
+    }
+}
