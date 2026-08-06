@@ -4,6 +4,9 @@ struct ContentView: View {
     @ObservedObject var document: WifiSurveyDocument
     @State private var selectedFloorID: UUID? = nil
     @StateObject private var locationAuth = LocationAuthManager()
+    @State private var scanActor = ScanActor()
+    @State private var latestBatch: [ScannedNetwork] = []
+    @State private var isScanning = false
 
     private var selectedFloorIndex: Int? {
         document.survey.floors.firstIndex(where: { $0.id == selectedFloorID })
@@ -17,12 +20,25 @@ struct ContentView: View {
             if let idx = selectedFloorIndex {
                 FloorDetailView(
                     document: document,
-                    floor: $document.survey.floors[idx]
+                    floor: $document.survey.floors[idx],
+                    latestBatch: latestBatch,
+                    isScanning: isScanning
                 )
             } else {
                 Text("Select or add a floor in the sidebar.")
                     .foregroundStyle(.secondary)
             }
+        }
+        .task {
+            isScanning = true
+            let stream = await scanActor.startScanning()
+            for await batch in stream {
+                latestBatch = batch
+            }
+            isScanning = false
+        }
+        .onDisappear {
+            Task { await scanActor.stopScanning() }
         }
         .onAppear { locationAuth.requestIfNeeded() }
         .overlay(alignment: .top) {

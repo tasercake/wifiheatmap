@@ -16,13 +16,6 @@ struct FloorDetailView: View {
         Array(Set(latestBatch.map(\.ssid))).sorted()
     }
 
-    private var lastRSSI: Int? {
-        let relevant = selectedSSID == nil
-            ? latestBatch
-            : latestBatch.filter { $0.ssid == selectedSSID }
-        return relevant.filter { $0.band == activeBand }.map(\.rssi).max()
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             FloorPlanView(
@@ -30,7 +23,7 @@ struct FloorDetailView: View {
                 floor: $floor,
                 activeBand: activeBand,
                 isCalibrating: isCalibrating,
-                onTap: { _ in }  // wired in Task 10
+                onTap: logReading
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -40,8 +33,14 @@ struct FloorDetailView: View {
             HStack {
                 calibrationStatus
                 Spacer()
-                if let rssi = lastRSSI {
-                    Text("Last RSSI: \(rssi) dBm")
+                if let best = latestBatch
+                    .filter({ $0.band == activeBand && (selectedSSID == nil || $0.ssid == selectedSSID) })
+                    .max(by: { $0.rssi < $1.rssi }) {
+                    Text("Last: \(best.rssi) dBm \u{2014} tap map to log")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("No signal on \(activeBand.displayName)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -101,6 +100,25 @@ struct FloorDetailView: View {
                     .font(.caption)
             }
         }
+    }
+
+    private func logReading(at position: CGPoint) {
+        guard floor.calibration != nil else { return }
+        let candidates = latestBatch.filter { n in
+            n.band == activeBand && (selectedSSID == nil || n.ssid == selectedSSID)
+        }
+        guard let best = candidates.max(by: { $0.rssi < $1.rssi }) else { return }
+        let sample = WifiSample(
+            id: UUID(),
+            position: position,
+            timestamp: Date(),
+            ssid: best.ssid,
+            bssid: best.bssid,
+            rssi: best.rssi,
+            noise: best.noise,
+            band: best.band
+        )
+        floor.samples.append(sample)
     }
 
     private func importFloorPlan() {
