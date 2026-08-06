@@ -20,7 +20,6 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: WifiHeatmap/WifiHeatmap.entitlements
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "WiFi Heatmap needs location access to read WiFi access point details."
     info:
       path: WifiHeatmap/Info.plist
       properties:
