@@ -9,12 +9,14 @@
 /* Begin PBXBuildFile section */
 		05434F656996ADBEE7CB988A /* ScannedNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04165CB834D74B4C3244FAF3 /* ScannedNetwork.swift */; };
 		061DE7657E5733CC0EE64FBD /* WifiSurvey.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9177E3486DE4608914CE25 /* WifiSurvey.swift */; };
+		2809D466E0DBDA2207BF6244 /* WifiSurveyDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 345125B88C3FEC37F35C9DDA /* WifiSurveyDocument.swift */; };
 		3B1C157B6D9D976524ABE726 /* WifiSample.swift in Sources */ = {isa = PBXBuildFile; fileRef = 541035A6958EB0CEE3C79F44 /* WifiSample.swift */; };
 		5908562A1682E974B17A2252 /* Calibration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7AC2ADF99CDD8BF14918A2 /* Calibration.swift */; };
 		5AB8D975CD5CD18497F52DE6 /* WifiHeatmapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DE565D6241B6049924027BE /* WifiHeatmapTests.swift */; };
 		6269A99478B3B6BC8A1EE904 /* Floor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77F3E4270FABCD6DC84DEFE /* Floor.swift */; };
 		9CEAD7BACCC9F2F2EEA978C8 /* WifiHeatmapApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 837E7BDF7E4D341C94A7CF8E /* WifiHeatmapApp.swift */; };
 		BB09945F2C385EC53126178D /* WiFiBand.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1DD8456355428BEE8750C2 /* WiFiBand.swift */; };
+		EB53C8D7425D47DDA87BE641 /* DocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C298180F4F3DD00949F7B4 /* DocumentTests.swift */; };
 		F87A3751C2296730B5074409 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0886C1413D50D514D7CF19 /* ModelTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -31,6 +33,8 @@
 /* Begin PBXFileReference section */
 		04165CB834D74B4C3244FAF3 /* ScannedNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannedNetwork.swift; sourceTree = "<group>"; };
 		2C7AC2ADF99CDD8BF14918A2 /* Calibration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Calibration.swift; sourceTree = "<group>"; };
+		345125B88C3FEC37F35C9DDA /* WifiSurveyDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WifiSurveyDocument.swift; sourceTree = "<group>"; };
+		35C298180F4F3DD00949F7B4 /* DocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentTests.swift; sourceTree = "<group>"; };
 		4A0886C1413D50D514D7CF19 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
 		541035A6958EB0CEE3C79F44 /* WifiSample.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WifiSample.swift; sourceTree = "<group>"; };
 		606187A431D445BFCB52467B /* WifiHeatmapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WifiHeatmapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -68,6 +72,7 @@
 		EC5AC9D5478E158E8C427C89 /* WifiHeatmapTests */ = {
 			isa = PBXGroup;
 			children = (
+				35C298180F4F3DD00949F7B4 /* DocumentTests.swift */,
 				4A0886C1413D50D514D7CF19 /* ModelTests.swift */,
 				7DE565D6241B6049924027BE /* WifiHeatmapTests.swift */,
 			);
@@ -92,6 +97,7 @@
 				FD1DD8456355428BEE8750C2 /* WiFiBand.swift */,
 				541035A6958EB0CEE3C79F44 /* WifiSample.swift */,
 				AE9177E3486DE4608914CE25 /* WifiSurvey.swift */,
+				345125B88C3FEC37F35C9DDA /* WifiSurveyDocument.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -173,6 +179,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EB53C8D7425D47DDA87BE641 /* DocumentTests.swift in Sources */,
 				F87A3751C2296730B5074409 /* ModelTests.swift in Sources */,
 				5AB8D975CD5CD18497F52DE6 /* WifiHeatmapTests.swift in Sources */,
 			);
@@ -189,6 +196,7 @@
 				9CEAD7BACCC9F2F2EEA978C8 /* WifiHeatmapApp.swift in Sources */,
 				3B1C157B6D9D976524ABE726 /* WifiSample.swift in Sources */,
 				061DE7657E5733CC0EE64FBD /* WifiSurvey.swift in Sources */,
+				2809D466E0DBDA2207BF6244 /* WifiSurveyDocument.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
