@@ -38,8 +38,8 @@ struct FloorPlanView: View {
                 }
             }
         }
-        .onChange(of: floor.samples.count) { _ in recomputeHeatmap() }
-        .onChange(of: activeBand)          { _ in recomputeHeatmap() }
+        .onChange(of: floor.samples.count) { recomputeHeatmap() }
+        .onChange(of: activeBand)          { recomputeHeatmap() }
         .onAppear { recomputeHeatmap() }
         .onDisappear { renderTask?.cancel() }
     }
