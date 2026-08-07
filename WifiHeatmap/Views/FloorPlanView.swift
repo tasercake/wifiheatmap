@@ -15,10 +15,11 @@ struct FloorPlanView: View {
         GeometryReader { geo in
             ZStack {
                 floorPlanImage(geo.size)
-                HeatmapCanvas(image: heatmapImage)
+                HeatmapCanvas(image: heatmapImage, displayRect: imageRect(in: geo.size))
                 SampleMarkersView(
                     samples: floor.samples.filter { $0.band == activeBand },
-                    imageSize: imageNaturalSize
+                    imageSize: imageNaturalSize,
+                    displayRect: imageRect(in: geo.size)
                 )
                 if isCalibrating {
                     CalibrationOverlayView(imageSize: geo.size) { cal in
