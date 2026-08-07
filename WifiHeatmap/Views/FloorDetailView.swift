@@ -13,6 +13,7 @@ struct FloorDetailView: View {
     @State private var isCalibrating = false
     @State private var showHeatmap = false
     @State private var colorScheme: HeatmapColorScheme = .classic
+    @State private var outerRadius: Double = IDWInterpolator.outerRadiusMeters
 
     private var availableSSIDs: [String] {
         Array(Set(latestBatch.map(\.ssid))).sorted()
@@ -26,6 +27,7 @@ struct FloorDetailView: View {
                 activeBand: activeBand,
                 showHeatmap: showHeatmap,
                 colorScheme: colorScheme,
+                outerRadius: outerRadius,
                 isCalibrating: isCalibrating,
                 onTap: logReading
             )
@@ -95,6 +97,24 @@ struct FloorDetailView: View {
             }
             .frame(minWidth: 140)
             .disabled(!showHeatmap)
+        }
+        ToolbarItem {
+            HStack(spacing: 4) {
+                Text("Fade:")
+                    .font(.caption)
+                    .foregroundStyle(showHeatmap ? .primary : .tertiary)
+                Slider(
+                    value: $outerRadius,
+                    in: IDWInterpolator.innerRadiusMeters...20,
+                    step: 0.5
+                )
+                .frame(width: 90)
+                .disabled(!showHeatmap)
+                Text("\(outerRadius, specifier: "%.0f")m")
+                    .font(.caption)
+                    .foregroundStyle(showHeatmap ? .primary : .tertiary)
+                    .frame(width: 24, alignment: .leading)
+            }
         }
         ToolbarItem {
             Button(isCalibrating ? "Done Calibrating" : "Calibrate") {

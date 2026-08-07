@@ -16,7 +16,8 @@ enum IDWInterpolator {
         samples: [WifiSample],
         calibration: Calibration,
         band: WiFiBand,
-        imageSize: CGSize
+        imageSize: CGSize,
+        outerRadius: Double = outerRadiusMeters
     ) -> [[Cell?]] {
         let filtered = samples.filter { $0.band == band }
         guard !filtered.isEmpty else {
@@ -54,7 +55,7 @@ enum IDWInterpolator {
 
                 guard weightSum > 0 else { continue }
                 let rssi  = Float(valueSum / weightSum)
-                let alpha = alphaFor(nearestPixelDist: nearestDist, metersPerPixel: mpp)
+                let alpha = alphaFor(nearestPixelDist: nearestDist, metersPerPixel: mpp, outerRadius: outerRadius)
                 grid[row][col] = Cell(rssi: rssi, alpha: alpha)
             }
         }
@@ -63,11 +64,11 @@ enum IDWInterpolator {
     }
 
     // Smooth fade: full opacity within innerRadius, zero at outerRadius, smooth-step in between.
-    private static func alphaFor(nearestPixelDist: Double, metersPerPixel: Double) -> Float {
+    private static func alphaFor(nearestPixelDist: Double, metersPerPixel: Double, outerRadius: Double) -> Float {
         let distMeters = nearestPixelDist * metersPerPixel
         if distMeters <= innerRadiusMeters { return 1.0 }
-        if distMeters >= outerRadiusMeters { return 0.0 }
-        let t = Float((distMeters - innerRadiusMeters) / (outerRadiusMeters - innerRadiusMeters))
+        if distMeters >= outerRadius { return 0.0 }
+        let t = Float((distMeters - innerRadiusMeters) / (outerRadius - innerRadiusMeters))
         return 1.0 - (3 * t * t - 2 * t * t * t)  // smooth step
     }
 }
