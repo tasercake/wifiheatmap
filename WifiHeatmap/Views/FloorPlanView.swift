@@ -94,6 +94,7 @@ struct FloorPlanView: View {
         renderTask = Task.detached(priority: .userInitiated) {
             let grid = IDWInterpolator.interpolate(samples: samples, calibration: cal, band: band, imageSize: imgSize)
             let img  = HeatmapRenderer.render(grid: grid)
+            guard !Task.isCancelled else { return }
             await MainActor.run { heatmapImage = img }
         }
     }
