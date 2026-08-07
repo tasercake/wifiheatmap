@@ -105,7 +105,7 @@ struct FloorDetailView: View {
                     .foregroundStyle(showHeatmap ? .primary : .tertiary)
                 Slider(
                     value: $outerRadius,
-                    in: IDWInterpolator.innerRadiusMeters...20,
+                    in: IDWInterpolator.innerRadiusMeters...30,
                     step: 0.5
                 )
                 .frame(width: 90)
