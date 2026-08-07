@@ -5,6 +5,7 @@ struct FloorPlanView: View {
     @ObservedObject var document: WifiSurveyDocument
     @Binding var floor: Floor
     let activeBand: WiFiBand
+    let showHeatmap: Bool
     let isCalibrating: Bool
     let onTap: (CGPoint) -> Void
 
@@ -15,7 +16,7 @@ struct FloorPlanView: View {
         GeometryReader { geo in
             ZStack {
                 floorPlanImage(geo.size)
-                HeatmapCanvas(image: heatmapImage, displayRect: imageRect(in: geo.size))
+                HeatmapCanvas(image: showHeatmap ? heatmapImage : nil, displayRect: imageRect(in: geo.size))
                 SampleMarkersView(
                     samples: floor.samples.filter { $0.band == activeBand },
                     imageSize: imageNaturalSize,

@@ -11,6 +11,7 @@ struct FloorDetailView: View {
     @State private var activeBand: WiFiBand = .ghz5
     @State private var selectedSSID: String? = nil
     @State private var isCalibrating = false
+    @State private var showHeatmap = false
 
     private var availableSSIDs: [String] {
         Array(Set(latestBatch.map(\.ssid))).sorted()
@@ -22,6 +23,7 @@ struct FloorDetailView: View {
                 document: document,
                 floor: $floor,
                 activeBand: activeBand,
+                showHeatmap: showHeatmap,
                 isCalibrating: isCalibrating,
                 onTap: logReading
             )
@@ -75,6 +77,13 @@ struct FloorDetailView: View {
             Label(isScanning ? "Scanning\u{2026}" : "Idle",
                   systemImage: isScanning ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
                 .foregroundStyle(isScanning ? .green : .secondary)
+        }
+        ToolbarItem {
+            Toggle(isOn: $showHeatmap) {
+                Label("Heatmap", systemImage: "thermometer.medium")
+            }
+            .toggleStyle(.button)
+            .help(showHeatmap ? "Hide heatmap" : "Show heatmap")
         }
         ToolbarItem {
             Button(isCalibrating ? "Done Calibrating" : "Calibrate") {
