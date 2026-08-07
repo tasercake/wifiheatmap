@@ -7,8 +7,9 @@ enum HeatmapRenderer {
     static let maxRSSI: Float = -50
 
     /// Returns a gridSize×gridSize RGBA CGImage.
-    /// nil cells → alpha = 0 (transparent); non-nil cells → fully opaque.
-    static func render(grid: [[Float?]], colorScheme: HeatmapColorScheme = .classic) -> CGImage? {
+    /// nil cells and cells with alpha=0 → fully transparent.
+    /// Cell.alpha drives per-pixel opacity (premultiplied).
+    static func render(grid: [[IDWInterpolator.Cell?]], colorScheme: HeatmapColorScheme = .classic) -> CGImage? {
         let size = IDWInterpolator.gridSize
         let bytesPerRow = size * 4
         let totalBytes = size * bytesPerRow
@@ -22,13 +23,15 @@ enum HeatmapRenderer {
 
         for row in 0..<size {
             for col in 0..<size {
-                guard let rssi = grid[row][col] else { continue }
+                guard let cell = grid[row][col], cell.alpha > 0 else { continue }
                 let idx = (row * size + col) * 4
-                let (r, g, b) = color(for: rssi, scheme: colorScheme)
-                pixels[idx]   = r
-                pixels[idx+1] = g
-                pixels[idx+2] = b
-                pixels[idx+3] = 255
+                let (r, g, b) = color(for: cell.rssi, scheme: colorScheme)
+                let a = cell.alpha
+                // Premultiplied alpha: RGB channels scaled by alpha
+                pixels[idx]   = UInt8(Float(r) * a)
+                pixels[idx+1] = UInt8(Float(g) * a)
+                pixels[idx+2] = UInt8(Float(b) * a)
+                pixels[idx+3] = UInt8(a * 255)
             }
         }
 
@@ -51,17 +54,12 @@ enum HeatmapRenderer {
 
         switch scheme {
         case .classic:
-            // hue 240° (blue, weak) → 0° (red, strong)
             let hue = CGFloat((1.0 - t) * (240.0 / 360.0))
             return hsbToRGB(hue: hue, saturation: 1, brightness: 1)
-
         case .trafficLight:
-            // hue 0° (red, weak) → 120° (green, strong)
             let hue = CGFloat(t * (120.0 / 360.0))
             return hsbToRGB(hue: hue, saturation: 0.9, brightness: 0.85)
-
         case .colorblindSafe:
-            // Okabe-Ito: blue (0,114,178) weak → orange (230,159,0) strong
             let r = UInt8(lerp(0,   230, t))
             let g = UInt8(lerp(114, 159, t))
             let b = UInt8(lerp(178,   0, t))
