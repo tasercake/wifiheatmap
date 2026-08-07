@@ -12,6 +12,7 @@ struct FloorDetailView: View {
     @State private var selectedSSID: String? = nil
     @State private var isCalibrating = false
     @State private var showHeatmap = false
+    @State private var colorScheme: HeatmapColorScheme = .classic
 
     private var availableSSIDs: [String] {
         Array(Set(latestBatch.map(\.ssid))).sorted()
@@ -24,6 +25,7 @@ struct FloorDetailView: View {
                 floor: $floor,
                 activeBand: activeBand,
                 showHeatmap: showHeatmap,
+                colorScheme: colorScheme,
                 isCalibrating: isCalibrating,
                 onTap: logReading
             )
@@ -84,6 +86,15 @@ struct FloorDetailView: View {
             }
             .toggleStyle(.button)
             .help(showHeatmap ? "Hide heatmap" : "Show heatmap")
+        }
+        ToolbarItem {
+            Picker("Colors", selection: $colorScheme) {
+                ForEach(HeatmapColorScheme.allCases, id: \.self) { scheme in
+                    Text(scheme.displayName).tag(scheme)
+                }
+            }
+            .frame(minWidth: 140)
+            .disabled(!showHeatmap)
         }
         ToolbarItem {
             Button(isCalibrating ? "Done Calibrating" : "Calibrate") {
