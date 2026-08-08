@@ -13,6 +13,7 @@ struct FloorDetailView: View {
     @State private var isCalibrating = false
     @State private var showHeatmap = false
     @State private var colorScheme: HeatmapColorScheme = .classic
+    @State private var metric: HeatmapMetric = .rssi
     @State private var outerRadius: Double = IDWInterpolator.outerRadiusMeters
 
     private var availableSSIDs: [String] {
@@ -27,6 +28,7 @@ struct FloorDetailView: View {
                 activeBand: activeBand,
                 showHeatmap: showHeatmap,
                 colorScheme: colorScheme,
+                metric: metric,
                 outerRadius: outerRadius,
                 isCalibrating: isCalibrating,
                 onTap: logReading
@@ -97,6 +99,16 @@ struct FloorDetailView: View {
             }
             .frame(minWidth: 140)
             .disabled(!showHeatmap)
+        }
+        ToolbarItem {
+            Picker("Metric", selection: $metric) {
+                ForEach(HeatmapMetric.allCases, id: \.self) { m in
+                    Text(m.displayName).tag(m)
+                }
+            }
+            .frame(minWidth: 110)
+            .disabled(!showHeatmap)
+            .help("Switch between RSSI, SNR, and Channel interference map")
         }
         ToolbarItem {
             HStack(spacing: 4) {

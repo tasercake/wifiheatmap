@@ -31,7 +31,7 @@ final class IDWInterpolatorTests: XCTestCase {
         )
         let grid = IDWInterpolator.interpolate(samples: [sample], calibration: cal, band: .ghz5, imageSize: testImageSize)
         XCTAssertNotNil(grid[0][0])
-        XCTAssertEqual(grid[0][0]!.rssi, -60, accuracy: 1.0)
+        XCTAssertEqual(grid[0][0]!.value, -60, accuracy: 1.0)
         XCTAssertEqual(grid[0][0]!.alpha, 1.0, accuracy: 0.001)  // distance = 0 → full opacity
     }
 
@@ -58,10 +58,41 @@ final class IDWInterpolatorTests: XCTestCase {
         // Center cell: both samples are ~100px away = 1m, well within innerRadius (3m) → alpha = 1.0
         XCTAssertNotNil(grid[0][IDWInterpolator.gridSize / 2], "Center cell must be non-nil when samples bracket the center")
         if let midCell = grid[0][IDWInterpolator.gridSize / 2] {
-            XCTAssertGreaterThan(midCell.rssi, -90)
-            XCTAssertLessThan(midCell.rssi, -50)
+            XCTAssertGreaterThan(midCell.value, -90)
+            XCTAssertLessThan(midCell.value, -50)
             XCTAssertEqual(midCell.alpha, 1.0, accuracy: 0.001)
         }
+    }
+
+    func testSNRMetricComputesSNRValue() {
+        // rssi=-60, noise=-90 → SNR=30
+        let sample = WifiSample(id: UUID(), position: CGPoint(x: 0, y: 0),
+                                timestamp: Date(timeIntervalSince1970: 0),
+                                ssid: "N", bssid: "a", rssi: -60, noise: -90, band: .ghz5, channel: 6)
+        let grid = IDWInterpolator.interpolate(samples: [sample], calibration: cal,
+                                               band: .ghz5, imageSize: testImageSize, metric: .snr)
+        XCTAssertNotNil(grid[0][0])
+        XCTAssertEqual(grid[0][0]!.value, 30.0, accuracy: 1.0)
+    }
+
+    func testChannelMetricUsesNearestSampleChannel() {
+        let s1 = WifiSample(id: UUID(), position: CGPoint(x: 0, y: 0),
+                            timestamp: Date(timeIntervalSince1970: 0),
+                            ssid: "N", bssid: "a", rssi: -60, noise: -90, band: .ghz5, channel: 36)
+        let grid = IDWInterpolator.interpolate(samples: [s1], calibration: cal,
+                                               band: .ghz5, imageSize: testImageSize, metric: .channel)
+        XCTAssertNotNil(grid[0][0])
+        XCTAssertEqual(grid[0][0]!.value, 36.0, accuracy: 0.1)
+    }
+
+    func testRSSIMetricDefaultBehaviorUnchanged() {
+        let sample = WifiSample(id: UUID(), position: CGPoint(x: 0, y: 0),
+                                timestamp: Date(timeIntervalSince1970: 0),
+                                ssid: "N", bssid: "a", rssi: -60, noise: -90, band: .ghz5, channel: 6)
+        let grid = IDWInterpolator.interpolate(samples: [sample], calibration: cal,
+                                               band: .ghz5, imageSize: testImageSize, metric: .rssi)
+        XCTAssertNotNil(grid[0][0])
+        XCTAssertEqual(grid[0][0]!.value, -60.0, accuracy: 1.0)
     }
 
     func testWifiSampleChannelDefaultsToZeroWhenDecoded() throws {

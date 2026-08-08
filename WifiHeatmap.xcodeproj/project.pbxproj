@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		023B43816F7EFC0948998011 /* HeatmapMetric.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A5FBA99EBE71D6C03635D6F /* HeatmapMetric.swift */; };
 		05434F656996ADBEE7CB988A /* ScannedNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04165CB834D74B4C3244FAF3 /* ScannedNetwork.swift */; };
 		061DE7657E5733CC0EE64FBD /* WifiSurvey.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9177E3486DE4608914CE25 /* WifiSurvey.swift */; };
 		12FCD0F431CD6732530A3745 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD57B9ADE86C374D2647B6EA /* ContentView.swift */; };
@@ -47,6 +48,7 @@
 /* Begin PBXFileReference section */
 		04049C407E0034CA5430234A /* HeatmapColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapColorScheme.swift; sourceTree = "<group>"; };
 		04165CB834D74B4C3244FAF3 /* ScannedNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannedNetwork.swift; sourceTree = "<group>"; };
+		0A5FBA99EBE71D6C03635D6F /* HeatmapMetric.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapMetric.swift; sourceTree = "<group>"; };
 		0CCCBDA701C9B4DB169A068C /* FloorPlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloorPlanView.swift; sourceTree = "<group>"; };
 		1343CFA6FEA24CCFE94154EA /* IDWInterpolator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IDWInterpolator.swift; sourceTree = "<group>"; };
 		2C7AC2ADF99CDD8BF14918A2 /* Calibration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Calibration.swift; sourceTree = "<group>"; };
@@ -127,6 +129,7 @@
 			isa = PBXGroup;
 			children = (
 				04049C407E0034CA5430234A /* HeatmapColorScheme.swift */,
+				0A5FBA99EBE71D6C03635D6F /* HeatmapMetric.swift */,
 				CF802B491548582B927EC118 /* HeatmapRenderer.swift */,
 				1343CFA6FEA24CCFE94154EA /* IDWInterpolator.swift */,
 			);
@@ -266,6 +269,7 @@
 				CCC2EF9D3581FFCA8FDE65B1 /* FloorSidebarView.swift in Sources */,
 				ABC3DA80EA17A3E7D5ECE155 /* HeatmapCanvas.swift in Sources */,
 				A1621D4E9BDAF86F77D22E94 /* HeatmapColorScheme.swift in Sources */,
+				023B43816F7EFC0948998011 /* HeatmapMetric.swift in Sources */,
 				3886DE64FA1F8C40A9BFDE8F /* HeatmapRenderer.swift in Sources */,
 				1751EA541C4D2A70A1B73CFA /* IDWInterpolator.swift in Sources */,
 				AF5B46FB79998F082518FEB5 /* LocationAuthManager.swift in Sources */,

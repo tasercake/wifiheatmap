@@ -4,9 +4,9 @@ import CoreGraphics
 
 final class HeatmapRendererTests: XCTestCase {
 
-    // Convenience: fully-opaque cell at a given RSSI
-    private func cell(_ rssi: Float) -> IDWInterpolator.Cell {
-        IDWInterpolator.Cell(rssi: rssi, alpha: 1.0)
+    // Convenience: fully-opaque cell at a given value
+    private func cell(_ value: Float) -> IDWInterpolator.Cell {
+        IDWInterpolator.Cell(value: value, alpha: 1.0)
     }
 
     private func emptyGrid() -> [[IDWInterpolator.Cell?]] {
@@ -54,6 +54,22 @@ final class HeatmapRendererTests: XCTestCase {
             return XCTFail("render returned nil")
         }
         XCTAssertEqual(pixelAlpha(img, x: 1, y: 1), 0)
+    }
+
+    func testSNRRangeIsZeroToForty() {
+        let (min, max) = HeatmapRenderer.valueRange(for: .snr)
+        XCTAssertEqual(min, 0)
+        XCTAssertEqual(max, 40)
+    }
+
+    func testChannelColorIsNotTransparent() {
+        var grid = emptyGrid()
+        grid[0][0] = IDWInterpolator.Cell(value: 36, alpha: 1.0)
+        guard let img = HeatmapRenderer.render(grid: grid, metric: .channel) else {
+            return XCTFail("render returned nil")
+        }
+        let (_, _, _, a) = pixelRGBA(img, x: 0, y: 0)
+        XCTAssertEqual(a, 255)
     }
 
     // MARK: - Helpers

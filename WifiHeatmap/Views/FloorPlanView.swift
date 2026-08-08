@@ -7,6 +7,7 @@ struct FloorPlanView: View {
     let activeBand: WiFiBand
     let showHeatmap: Bool
     let colorScheme: HeatmapColorScheme
+    let metric: HeatmapMetric
     let outerRadius: Double
     let isCalibrating: Bool
     let onTap: (CGPoint) -> Void
@@ -44,6 +45,7 @@ struct FloorPlanView: View {
         .onChange(of: floor.samples.count) { recomputeHeatmap() }
         .onChange(of: activeBand)          { recomputeHeatmap() }
         .onChange(of: colorScheme)         { recomputeHeatmap() }
+        .onChange(of: metric)              { recomputeHeatmap() }
         .onChange(of: outerRadius)         { recomputeHeatmap() }
         .onAppear { recomputeHeatmap() }
         .onDisappear { renderTask?.cancel() }
@@ -98,10 +100,12 @@ struct FloorPlanView: View {
         let band    = activeBand
         let scheme  = colorScheme
         let radius  = outerRadius
+        let met     = metric
         let imgSize = imageNaturalSize
         renderTask = Task.detached(priority: .userInitiated) {
-            let grid = IDWInterpolator.interpolate(samples: samples, calibration: cal, band: band, imageSize: imgSize, outerRadius: radius)
-            let img  = HeatmapRenderer.render(grid: grid, colorScheme: scheme)
+            let grid = IDWInterpolator.interpolate(samples: samples, calibration: cal, band: band,
+                                                   imageSize: imgSize, outerRadius: radius, metric: met)
+            let img  = HeatmapRenderer.render(grid: grid, colorScheme: scheme, metric: met)
             guard !Task.isCancelled else { return }
             await MainActor.run { heatmapImage = img }
         }
