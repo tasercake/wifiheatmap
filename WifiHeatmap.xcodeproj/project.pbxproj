@@ -15,6 +15,7 @@
 		2809D466E0DBDA2207BF6244 /* WifiSurveyDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 345125B88C3FEC37F35C9DDA /* WifiSurveyDocument.swift */; };
 		3886DE64FA1F8C40A9BFDE8F /* HeatmapRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF802B491548582B927EC118 /* HeatmapRenderer.swift */; };
 		3B1C157B6D9D976524ABE726 /* WifiSample.swift in Sources */ = {isa = PBXBuildFile; fileRef = 541035A6958EB0CEE3C79F44 /* WifiSample.swift */; };
+		48BB9C9BE9212E9F7AC2176D /* HeatmapLegendView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6F4A95B3FF14D24256FA0A /* HeatmapLegendView.swift */; };
 		5486499F13714C98DDBA596E /* FloorPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CCCBDA701C9B4DB169A068C /* FloorPlanView.swift */; };
 		5908562A1682E974B17A2252 /* Calibration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7AC2ADF99CDD8BF14918A2 /* Calibration.swift */; };
 		5AB8D975CD5CD18497F52DE6 /* WifiHeatmapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DE565D6241B6049924027BE /* WifiHeatmapTests.swift */; };
@@ -74,6 +75,7 @@
 		C1388F931290EEF63CAC588A /* WifiHeatmap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WifiHeatmap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF802B491548582B927EC118 /* HeatmapRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapRenderer.swift; sourceTree = "<group>"; };
 		E77F3E4270FABCD6DC84DEFE /* Floor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Floor.swift; sourceTree = "<group>"; };
+		EA6F4A95B3FF14D24256FA0A /* HeatmapLegendView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapLegendView.swift; sourceTree = "<group>"; };
 		EFBCBD61022CEA45ACF70951 /* HeatmapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapCanvas.swift; sourceTree = "<group>"; };
 		FD1DD8456355428BEE8750C2 /* WiFiBand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WiFiBand.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -106,6 +108,7 @@
 				0CCCBDA701C9B4DB169A068C /* FloorPlanView.swift */,
 				5D432ACDCEAED68CD8CBE094 /* FloorSidebarView.swift */,
 				EFBCBD61022CEA45ACF70951 /* HeatmapCanvas.swift */,
+				EA6F4A95B3FF14D24256FA0A /* HeatmapLegendView.swift */,
 				51172B1C91057207851D3FC0 /* SampleMarkersView.swift */,
 			);
 			path = Views;
@@ -269,6 +272,7 @@
 				CCC2EF9D3581FFCA8FDE65B1 /* FloorSidebarView.swift in Sources */,
 				ABC3DA80EA17A3E7D5ECE155 /* HeatmapCanvas.swift in Sources */,
 				A1621D4E9BDAF86F77D22E94 /* HeatmapColorScheme.swift in Sources */,
+				48BB9C9BE9212E9F7AC2176D /* HeatmapLegendView.swift in Sources */,
 				023B43816F7EFC0948998011 /* HeatmapMetric.swift in Sources */,
 				3886DE64FA1F8C40A9BFDE8F /* HeatmapRenderer.swift in Sources */,
 				1751EA541C4D2A70A1B73CFA /* IDWInterpolator.swift in Sources */,

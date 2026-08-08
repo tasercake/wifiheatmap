@@ -28,6 +28,12 @@ struct FloorPlanView: View {
                     imageSize: imageNaturalSize,
                     displayRect: imageRect(in: geo.size)
                 )
+                if showHeatmap {
+                    HeatmapLegendView(colorScheme: colorScheme, metric: metric)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .allowsHitTesting(false)
+                }
                 if isCalibrating {
                     CalibrationOverlayView(imageSize: geo.size) { cal in
                         floor.calibration = cal
