@@ -212,12 +212,19 @@ struct FloorDetailView: View {
         floor.samples.append(sample)
         let floorID = floor.id
         let sampleID = sample.id
-        undoManager?.registerUndo(withTarget: document) { [floorID, sampleID] doc in
+        let um = undoManager
+        um?.registerUndo(withTarget: document) { [floorID, sampleID, sample] doc in
             if let fi = doc.survey.floors.firstIndex(where: { $0.id == floorID }) {
                 doc.survey.floors[fi].samples.removeAll { $0.id == sampleID }
+                // Redo: re-add (isUndoing=true so this goes to redo stack)
+                um?.registerUndo(withTarget: doc) { [floorID, sample] doc2 in
+                    if let fi2 = doc2.survey.floors.firstIndex(where: { $0.id == floorID }) {
+                        doc2.survey.floors[fi2].samples.append(sample)
+                    }
+                }
             }
         }
-        undoManager?.setActionName("Log Reading")
+        um?.setActionName("Log Reading")
     }
 
     private func deleteReading(id: UUID) {
@@ -225,12 +232,19 @@ struct FloorDetailView: View {
         guard let idx = floor.samples.firstIndex(where: { $0.id == id }) else { return }
         let removed = floor.samples[idx]
         floor.samples.remove(at: idx)
-        undoManager?.registerUndo(withTarget: document) { [floorID, removed] doc in
+        let um = undoManager
+        um?.registerUndo(withTarget: document) { [floorID, removed] doc in
             if let fi = doc.survey.floors.firstIndex(where: { $0.id == floorID }) {
                 doc.survey.floors[fi].samples.append(removed)
+                // Redo: re-delete (isUndoing=true so this goes to redo stack)
+                um?.registerUndo(withTarget: doc) { [floorID, sampleID = removed.id] doc2 in
+                    if let fi2 = doc2.survey.floors.firstIndex(where: { $0.id == floorID }) {
+                        doc2.survey.floors[fi2].samples.removeAll { $0.id == sampleID }
+                    }
+                }
             }
         }
-        undoManager?.setActionName("Delete Reading")
+        um?.setActionName("Delete Reading")
     }
 
     private func importFloorPlan() {

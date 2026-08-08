@@ -64,8 +64,8 @@ enum HeatmapRenderer {
         )
     }
 
-    private static func gradientColor(value: Float, min: Float, max: Float,
-                                       scheme: HeatmapColorScheme) -> (UInt8, UInt8, UInt8) {
+    static func gradientColor(value: Float, min: Float, max: Float,
+                              scheme: HeatmapColorScheme) -> (UInt8, UInt8, UInt8) {
         let clamped = Swift.max(min, Swift.min(max, value))
         let t = (clamped - min) / (max - min)
         switch scheme {

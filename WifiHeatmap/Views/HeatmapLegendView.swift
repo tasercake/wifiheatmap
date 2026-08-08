@@ -44,22 +44,7 @@ struct HeatmapLegendView: View {
     private func sampleGradientColor(t: Float) -> (UInt8, UInt8, UInt8) {
         let (minV, maxV) = HeatmapRenderer.valueRange(for: metric)
         let value = minV + (maxV - minV) * t
-        var grid: [[IDWInterpolator.Cell?]] = Array(
-            repeating: Array(repeating: nil, count: IDWInterpolator.gridSize),
-            count: IDWInterpolator.gridSize
-        )
-        grid[0][0] = IDWInterpolator.Cell(value: value, alpha: 1.0)
-        guard let img = HeatmapRenderer.render(grid: grid, colorScheme: colorScheme, metric: metric)
-        else { return (128, 128, 128) }
-        var data = [UInt8](repeating: 0, count: 4)
-        guard let ctx = CGContext(
-            data: &data, width: 1, height: 1,
-            bitsPerComponent: 8, bytesPerRow: 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return (128, 128, 128) }
-        ctx.draw(img, in: CGRect(x: 0, y: 0, width: 1, height: 1))
-        return (data[0], data[1], data[2])
+        return HeatmapRenderer.gradientColor(value: value, min: minV, max: maxV, scheme: colorScheme)
     }
 
     private var rangeLabels: some View {
