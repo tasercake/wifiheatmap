@@ -12,6 +12,8 @@ struct FloorPlanView: View {
     let isCalibrating: Bool
     let onTap: (CGPoint) -> Void
     var filterBSSID: String? = nil
+    var isDeleteMode: Bool = false
+    var onDelete: (UUID) -> Void = { _ in }
 
     @State private var heatmapImage: CGImage? = nil
     @State private var renderTask: Task<Void, Never>? = nil
@@ -26,8 +28,30 @@ struct FloorPlanView: View {
                         $0.band == activeBand && (filterBSSID == nil || $0.bssid == filterBSSID)
                     },
                     imageSize: imageNaturalSize,
-                    displayRect: imageRect(in: geo.size)
+                    displayRect: imageRect(in: geo.size),
+                    isDeleteMode: isDeleteMode
                 )
+                Group {
+                    let rect = imageRect(in: geo.size)
+                    ForEach(floor.samples.filter {
+                        $0.band == activeBand && (filterBSSID == nil || $0.bssid == filterBSSID)
+                    }) { sample in
+                        Color.clear
+                            .frame(width: 18, height: 18)
+                            .contentShape(Circle())
+                            .position(
+                                x: rect.origin.x + (sample.position.x / imageNaturalSize.width) * rect.size.width,
+                                y: rect.origin.y + (sample.position.y / imageNaturalSize.height) * rect.size.height
+                            )
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    onDelete(sample.id)
+                                } label: {
+                                    Label("Delete Reading", systemImage: "trash")
+                                }
+                            }
+                    }
+                }
                 if showHeatmap {
                     HeatmapLegendView(colorScheme: colorScheme, metric: metric)
                         .padding(12)

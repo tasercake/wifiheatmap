@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct FloorDetailView: View {
+    @Environment(\.undoManager) var undoManager
     @ObservedObject var document: WifiSurveyDocument
     @Binding var floor: Floor
 
@@ -16,6 +17,7 @@ struct FloorDetailView: View {
     @State private var colorScheme: HeatmapColorScheme = .classic
     @State private var metric: HeatmapMetric = .rssi
     @State private var outerRadius: Double = IDWInterpolator.outerRadiusMeters
+    @State private var isDeleteMode: Bool = false
 
     private var availableSSIDs: [String] {
         Array(Set(latestBatch.map(\.ssid))).sorted()
@@ -40,7 +42,9 @@ struct FloorDetailView: View {
                 outerRadius: outerRadius,
                 isCalibrating: isCalibrating,
                 onTap: logReading,
-                filterBSSID: selectedBSSID
+                filterBSSID: selectedBSSID,
+                isDeleteMode: isDeleteMode,
+                onDelete: deleteReading
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -106,11 +110,19 @@ struct FloorDetailView: View {
                 .foregroundStyle(isScanning ? .green : .secondary)
         }
         ToolbarItem {
-            Toggle(isOn: $showHeatmap) {
-                Label("Heatmap", systemImage: "thermometer.medium")
+            HStack(spacing: 4) {
+                Toggle(isOn: $showHeatmap) {
+                    Label("Heatmap", systemImage: "thermometer.medium")
+                }
+                .toggleStyle(.button)
+                .help(showHeatmap ? "Hide heatmap" : "Show heatmap")
+                Toggle(isOn: $isDeleteMode) {
+                    Label("Delete Mode", systemImage: "minus.circle")
+                }
+                .toggleStyle(.button)
+                .help(isDeleteMode ? "Exit delete mode" : "Right-click any marker to delete it")
+                .tint(isDeleteMode ? .red : nil)
             }
-            .toggleStyle(.button)
-            .help(showHeatmap ? "Hide heatmap" : "Show heatmap")
         }
         ToolbarItem {
             Picker("Colors", selection: $colorScheme) {
@@ -193,6 +205,27 @@ struct FloorDetailView: View {
             channel:   best.channel
         )
         floor.samples.append(sample)
+        let floorID = floor.id
+        let sampleID = sample.id
+        undoManager?.registerUndo(withTarget: document) { [floorID, sampleID] doc in
+            if let fi = doc.survey.floors.firstIndex(where: { $0.id == floorID }) {
+                doc.survey.floors[fi].samples.removeAll { $0.id == sampleID }
+            }
+        }
+        undoManager?.setActionName("Log Reading")
+    }
+
+    private func deleteReading(id: UUID) {
+        let floorID = floor.id
+        guard let idx = floor.samples.firstIndex(where: { $0.id == id }) else { return }
+        let removed = floor.samples[idx]
+        floor.samples.remove(at: idx)
+        undoManager?.registerUndo(withTarget: document) { [floorID, removed] doc in
+            if let fi = doc.survey.floors.firstIndex(where: { $0.id == floorID }) {
+                doc.survey.floors[fi].samples.append(removed)
+            }
+        }
+        undoManager?.setActionName("Delete Reading")
     }
 
     private func importFloorPlan() {
