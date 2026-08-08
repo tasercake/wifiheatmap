@@ -15,6 +15,7 @@
 		2809D466E0DBDA2207BF6244 /* WifiSurveyDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 345125B88C3FEC37F35C9DDA /* WifiSurveyDocument.swift */; };
 		3886DE64FA1F8C40A9BFDE8F /* HeatmapRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF802B491548582B927EC118 /* HeatmapRenderer.swift */; };
 		3B1C157B6D9D976524ABE726 /* WifiSample.swift in Sources */ = {isa = PBXBuildFile; fileRef = 541035A6958EB0CEE3C79F44 /* WifiSample.swift */; };
+		47C9977C057E50CD6576E44F /* ExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A48603FB4704A5DCE1F337F /* ExportTests.swift */; };
 		48BB9C9BE9212E9F7AC2176D /* HeatmapLegendView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6F4A95B3FF14D24256FA0A /* HeatmapLegendView.swift */; };
 		5486499F13714C98DDBA596E /* FloorPlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CCCBDA701C9B4DB169A068C /* FloorPlanView.swift */; };
 		5908562A1682E974B17A2252 /* Calibration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7AC2ADF99CDD8BF14918A2 /* Calibration.swift */; };
@@ -63,6 +64,7 @@
 		606187A431D445BFCB52467B /* WifiHeatmapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WifiHeatmapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B096AC9C671EFD116B52608 /* CalibrationOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationOverlayView.swift; sourceTree = "<group>"; };
 		76F3E1DE1E6FBB76B8495C0F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7A48603FB4704A5DCE1F337F /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
 		7DE565D6241B6049924027BE /* WifiHeatmapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WifiHeatmapTests.swift; sourceTree = "<group>"; };
 		83066FF3779B2046A6ACB39A /* ScanActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanActor.swift; sourceTree = "<group>"; };
 		837E7BDF7E4D341C94A7CF8E /* WifiHeatmapApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WifiHeatmapApp.swift; sourceTree = "<group>"; };
@@ -143,6 +145,7 @@
 			isa = PBXGroup;
 			children = (
 				35C298180F4F3DD00949F7B4 /* DocumentTests.swift */,
+				7A48603FB4704A5DCE1F337F /* ExportTests.swift */,
 				4FD415E94458DF0719211D70 /* HeatmapRendererTests.swift */,
 				87BC78F34ACEB5FD0868086C /* IDWInterpolatorTests.swift */,
 				4A0886C1413D50D514D7CF19 /* ModelTests.swift */,
@@ -252,6 +255,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EB53C8D7425D47DDA87BE641 /* DocumentTests.swift in Sources */,
+				47C9977C057E50CD6576E44F /* ExportTests.swift in Sources */,
 				81064C153C890ED66504C583 /* HeatmapRendererTests.swift in Sources */,
 				9368ADA6F79A64D5DFF15218 /* IDWInterpolatorTests.swift in Sources */,
 				F87A3751C2296730B5074409 /* ModelTests.swift in Sources */,

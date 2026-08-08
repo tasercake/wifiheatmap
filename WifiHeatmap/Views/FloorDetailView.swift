@@ -1,4 +1,5 @@
 import SwiftUI
+import ImageIO
 
 struct FloorDetailView: View {
     @Environment(\.undoManager) var undoManager
@@ -122,6 +123,10 @@ struct FloorDetailView: View {
                 .toggleStyle(.button)
                 .help(isDeleteMode ? "Exit delete mode" : "Right-click any marker to delete it")
                 .tint(isDeleteMode ? .red : nil)
+                Button("Export\u{2026}") {
+                    exportFloorPlan()
+                }
+                .help("Export floor plan with heatmap as PNG")
             }
         }
         ToolbarItem {
@@ -236,5 +241,69 @@ struct FloorDetailView: View {
         panel.title = "Import Floor Plan"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         try? document.importFloorPlan(url: url, for: floor.id)
+    }
+
+    // MARK: - Export
+
+    static func composeExportImage(floorImage: CGImage, heatmapImage: CGImage?) -> CGImage? {
+        let w = floorImage.width
+        let h = floorImage.height
+        guard let ctx = CGContext(
+            data: nil, width: w, height: h,
+            bitsPerComponent: 8, bytesPerRow: w * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+        ) else { return nil }
+        ctx.draw(floorImage, in: CGRect(x: 0, y: 0, width: w, height: h))
+        if let hm = heatmapImage {
+            ctx.setAlpha(0.6)
+            ctx.draw(hm, in: CGRect(x: 0, y: 0, width: w, height: h))
+        }
+        return ctx.makeImage()
+    }
+
+    private func exportFloorPlan() {
+        guard let imageData = document.imageCache[floor.floorPlanFilename],
+              let src = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let floorImg = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return }
+
+        let imgSize = CGSize(width: floorImg.width, height: floorImg.height)
+        let samples = floor.samples
+        let band    = activeBand
+        let radius  = outerRadius
+        let met     = metric
+        let scheme  = colorScheme
+        let cal     = floor.calibration
+        let includeHeatmap = showHeatmap
+        let floorName = floor.name
+
+        Task.detached(priority: .userInitiated) {
+            let heatmapImg: CGImage?
+            if includeHeatmap, let c = cal {
+                let grid = IDWInterpolator.interpolate(
+                    samples: samples, calibration: c,
+                    band: band, imageSize: imgSize,
+                    outerRadius: radius, metric: met
+                )
+                heatmapImg = HeatmapRenderer.render(grid: grid, colorScheme: scheme, metric: met)
+            } else {
+                heatmapImg = nil
+            }
+            let composite = Self.composeExportImage(floorImage: floorImg, heatmapImage: heatmapImg)
+
+            await MainActor.run {
+                let panel = NSSavePanel()
+                panel.allowedContentTypes = [.png]
+                panel.nameFieldStringValue = "\(floorName).png"
+                panel.title = "Export Floor Plan"
+                guard panel.runModal() == .OK, let url = panel.url,
+                      let img = composite else { return }
+                guard let dest = CGImageDestinationCreateWithURL(
+                    url as CFURL, "public.png" as CFString, 1, nil
+                ) else { return }
+                CGImageDestinationAddImage(dest, img, nil)
+                CGImageDestinationFinalize(dest)
+            }
+        }
     }
 }
