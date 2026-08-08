@@ -149,14 +149,15 @@ struct FloorDetailView: View {
         }
         guard let best = candidates.max(by: { $0.rssi < $1.rssi }) else { return }
         let sample = WifiSample(
-            id: UUID(),
-            position: position,
+            id:        UUID(),
+            position:  position,
             timestamp: Date(),
-            ssid: best.ssid,
-            bssid: best.bssid,
-            rssi: best.rssi,
-            noise: best.noise,
-            band: best.band
+            ssid:      best.ssid,
+            bssid:     best.bssid,
+            rssi:      best.rssi,
+            noise:     best.noise,
+            band:      best.band,
+            channel:   best.channel
         )
         floor.samples.append(sample)
     }

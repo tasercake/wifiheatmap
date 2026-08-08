@@ -52,11 +52,12 @@ actor ScanActor {
         }
 
         return ScannedNetwork(
-            ssid:  ssid,
-            bssid: bssid,
-            rssi:  network.rssiValue,
-            noise: network.noiseMeasurement,
-            band:  band
+            ssid:    ssid,
+            bssid:   bssid,
+            rssi:    network.rssiValue,
+            noise:   network.noiseMeasurement,
+            band:    band,
+            channel: ch.channelNumber
         )
     }
 }

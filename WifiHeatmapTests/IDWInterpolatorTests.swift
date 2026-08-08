@@ -63,4 +63,31 @@ final class IDWInterpolatorTests: XCTestCase {
             XCTAssertEqual(midCell.alpha, 1.0, accuracy: 0.001)
         }
     }
+
+    func testWifiSampleChannelDefaultsToZeroWhenDecoded() throws {
+        // Old JSON without "channel" field — must decode with channel=0
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let json = """
+        {"id":"00000000-0000-0000-0000-000000000001",
+         "position":[0,0],
+         "timestamp":"1970-01-01T00:00:00Z",
+         "ssid":"Net","bssid":"aa:bb:cc:dd:ee:ff",
+         "rssi":-60,"noise":-90,"band":"ghz5"}
+        """.data(using: .utf8)!
+        let sample = try decoder.decode(WifiSample.self, from: json)
+        XCTAssertEqual(sample.channel, 0)
+    }
+
+    func testWifiSampleChannelRoundTrips() throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let original = WifiSample(id: UUID(), position: .zero, timestamp: Date(timeIntervalSince1970: 0),
+                                  ssid: "N", bssid: "a", rssi: -60, noise: -90, band: .ghz5, channel: 36)
+        let data = try encoder.encode(original)
+        let decoded = try decoder.decode(WifiSample.self, from: data)
+        XCTAssertEqual(decoded.channel, 36)
+    }
 }
