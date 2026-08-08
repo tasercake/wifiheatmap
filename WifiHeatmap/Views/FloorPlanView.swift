@@ -11,6 +11,7 @@ struct FloorPlanView: View {
     let outerRadius: Double
     let isCalibrating: Bool
     let onTap: (CGPoint) -> Void
+    var filterBSSID: String? = nil
 
     @State private var heatmapImage: CGImage? = nil
     @State private var renderTask: Task<Void, Never>? = nil
@@ -21,7 +22,9 @@ struct FloorPlanView: View {
                 floorPlanImage(geo.size)
                 HeatmapCanvas(image: showHeatmap ? heatmapImage : nil, displayRect: imageRect(in: geo.size))
                 SampleMarkersView(
-                    samples: floor.samples.filter { $0.band == activeBand },
+                    samples: floor.samples.filter {
+                        $0.band == activeBand && (filterBSSID == nil || $0.bssid == filterBSSID)
+                    },
                     imageSize: imageNaturalSize,
                     displayRect: imageRect(in: geo.size)
                 )
@@ -47,6 +50,7 @@ struct FloorPlanView: View {
         .onChange(of: colorScheme)         { recomputeHeatmap() }
         .onChange(of: metric)              { recomputeHeatmap() }
         .onChange(of: outerRadius)         { recomputeHeatmap() }
+        .onChange(of: filterBSSID)         { recomputeHeatmap() }
         .onAppear { recomputeHeatmap() }
         .onDisappear { renderTask?.cancel() }
     }
@@ -96,7 +100,8 @@ struct FloorPlanView: View {
     private func recomputeHeatmap() {
         renderTask?.cancel()
         guard let cal = floor.calibration else { heatmapImage = nil; return }
-        let samples = floor.samples
+        let samples = filterBSSID.map { bssid in floor.samples.filter { $0.bssid == bssid } }
+                      ?? floor.samples
         let band    = activeBand
         let scheme  = colorScheme
         let radius  = outerRadius

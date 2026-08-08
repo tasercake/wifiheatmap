@@ -10,6 +10,7 @@ struct FloorDetailView: View {
 
     @State private var activeBand: WiFiBand = .ghz5
     @State private var selectedSSID: String? = nil
+    @State private var selectedBSSID: String? = nil
     @State private var isCalibrating = false
     @State private var showHeatmap = false
     @State private var colorScheme: HeatmapColorScheme = .classic
@@ -18,6 +19,13 @@ struct FloorDetailView: View {
 
     private var availableSSIDs: [String] {
         Array(Set(latestBatch.map(\.ssid))).sorted()
+    }
+
+    private var availableBSSIDs: [String] {
+        let filtered = floor.samples.filter {
+            $0.band == activeBand && (selectedSSID == nil || $0.ssid == selectedSSID)
+        }
+        return Array(Set(filtered.map(\.bssid))).sorted()
     }
 
     var body: some View {
@@ -31,7 +39,8 @@ struct FloorDetailView: View {
                 metric: metric,
                 outerRadius: outerRadius,
                 isCalibrating: isCalibrating,
-                onTap: logReading
+                onTap: logReading,
+                filterBSSID: selectedBSSID
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -55,6 +64,8 @@ struct FloorDetailView: View {
             }
             .padding(8)
         }
+        .onChange(of: activeBand)   { selectedBSSID = nil }
+        .onChange(of: selectedSSID) { selectedBSSID = nil }
         .toolbar { toolbarContent }
         .navigationTitle(floor.name)
     }
@@ -78,6 +89,16 @@ struct FloorDetailView: View {
                 }
             }
             .frame(minWidth: 120)
+        }
+        ToolbarItem {
+            Picker("AP", selection: $selectedBSSID) {
+                Text("All APs").tag(Optional<String>.none)
+                ForEach(availableBSSIDs, id: \.self) { bssid in
+                    Text(bssid).tag(Optional(bssid))
+                }
+            }
+            .frame(minWidth: 130)
+            .help("Filter heatmap to a single access point by BSSID")
         }
         ToolbarItem {
             Label(isScanning ? "Scanning\u{2026}" : "Idle",
