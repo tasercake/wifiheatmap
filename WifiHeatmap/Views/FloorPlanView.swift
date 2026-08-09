@@ -31,6 +31,20 @@ struct FloorPlanView: View {
                     displayRect: imageRect(in: geo.size),
                     isDeleteMode: isDeleteMode
                 )
+                if showHeatmap {
+                    HeatmapLegendView(colorScheme: colorScheme, metric: metric)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .allowsHitTesting(false)
+                }
+                if isCalibrating {
+                    CalibrationOverlayView(imageSize: geo.size) { cal in
+                        floor.calibration = cal
+                    }
+                }
+                // Context menu circles must be topmost so secondary-click reaches them
+                // before the ZStack's tap gesture. Primary clicks on circles propagate
+                // up to the ZStack's onTapGesture since circles have no tap handler.
                 Group {
                     let rect = imageRect(in: geo.size)
                     ForEach(floor.samples.filter {
@@ -52,39 +66,27 @@ struct FloorPlanView: View {
                             }
                     }
                 }
-                if showHeatmap {
-                    HeatmapLegendView(colorScheme: colorScheme, metric: metric)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                        .allowsHitTesting(false)
-                }
-                if isCalibrating {
-                    CalibrationOverlayView(imageSize: geo.size) { cal in
-                        floor.calibration = cal
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(coordinateSpace: .local) { loc in
+                guard !isCalibrating else { return }
+                let rect = imageRect(in: geo.size)
+                guard rect.contains(loc) else { return }
+                let px = (loc.x - rect.origin.x) / rect.size.width  * imageNaturalSize.width
+                let py = (loc.y - rect.origin.y) / rect.size.height * imageNaturalSize.height
+                if isDeleteMode {
+                    let candidates = floor.samples.filter {
+                        $0.band == activeBand && (filterBSSID == nil || $0.bssid == filterBSSID)
+                    }
+                    let thresholdPx = 10.0 / rect.size.width * imageNaturalSize.width
+                    if let nearest = candidates.min(by: {
+                        hypot($0.position.x - px, $0.position.y - py) <
+                        hypot($1.position.x - px, $1.position.y - py)
+                    }), hypot(nearest.position.x - px, nearest.position.y - py) < thresholdPx {
+                        onDelete(nearest.id)
                     }
                 } else {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture { loc in
-                            let rect = imageRect(in: geo.size)
-                            guard rect.contains(loc) else { return }
-                            let px = (loc.x - rect.origin.x) / rect.size.width  * imageNaturalSize.width
-                            let py = (loc.y - rect.origin.y) / rect.size.height * imageNaturalSize.height
-                            if isDeleteMode {
-                                let candidates = floor.samples.filter {
-                                    $0.band == activeBand && (filterBSSID == nil || $0.bssid == filterBSSID)
-                                }
-                                let thresholdPx = 10.0 / rect.size.width * imageNaturalSize.width
-                                if let nearest = candidates.min(by: {
-                                    hypot($0.position.x - px, $0.position.y - py) <
-                                    hypot($1.position.x - px, $1.position.y - py)
-                                }), hypot(nearest.position.x - px, nearest.position.y - py) < thresholdPx {
-                                    onDelete(nearest.id)
-                                }
-                            } else {
-                                onTap(CGPoint(x: px, y: py))
-                            }
-                        }
+                    onTap(CGPoint(x: px, y: py))
                 }
             }
         }

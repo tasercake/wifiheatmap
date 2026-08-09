@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var document: WifiSurveyDocument
     @State private var selectedFloorID: UUID? = nil
+    @State private var showInspector: Bool = true
     @StateObject private var locationAuth = LocationAuthManager()
     @State private var scanActor = ScanActor()
     @State private var latestBatch: [ScannedNetwork] = []
@@ -13,20 +14,25 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            FloorSidebarView(document: document, selectedFloorID: $selectedFloorID)
-                .frame(minWidth: 160)
-        } detail: {
+        VStack(spacing: 0) {
+            FloorTabBar(
+                document: document,
+                selectedFloorID: $selectedFloorID,
+                showInspector: $showInspector
+            )
+
             if let idx = selectedFloorIndex {
                 FloorDetailView(
                     document: document,
                     floor: $document.survey.floors[idx],
                     latestBatch: latestBatch,
-                    isScanning: isScanning
+                    isScanning: isScanning,
+                    showInspector: $showInspector
                 )
             } else {
-                Text("Select or add a floor in the sidebar.")
+                Text("Add a floor using the \u{2060}+\u{2060} button above.")
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .task {
@@ -40,11 +46,12 @@ struct ContentView: View {
         .onDisappear {
             Task { await scanActor.stopScanning() }
         }
-        .onAppear { locationAuth.requestIfNeeded() }
+        .onAppear {
+            locationAuth.requestIfNeeded()
+            if selectedFloorID == nil { selectedFloorID = document.survey.floors.first?.id }
+        }
         .overlay(alignment: .top) {
-            if locationAuth.isDenied {
-                locationDeniedBanner
-            }
+            if locationAuth.isDenied { locationDeniedBanner }
         }
     }
 

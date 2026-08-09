@@ -1,6 +1,6 @@
-.worktrees/
-.superpowers/
+.DS_Store
+*.xcuserstate
 xcuserdata/
-*.xcscmblueprint
 DerivedData/
+*.xcworkspace/xcuserdata/
 .build/

@@ -6,9 +6,9 @@ struct FloorDetailView: View {
     @ObservedObject var document: WifiSurveyDocument
     @Binding var floor: Floor
 
-    // Passed in from ContentView (Task 10 wires the real values)
     var latestBatch: [ScannedNetwork] = []
     var isScanning: Bool = false
+    @Binding var showInspector: Bool
 
     @State private var activeBand: WiFiBand = .ghz5
     @State private var selectedSSID: String? = nil
@@ -32,156 +32,74 @@ struct FloorDetailView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            FloorPlanView(
-                document: document,
-                floor: $floor,
-                activeBand: activeBand,
-                showHeatmap: showHeatmap,
-                colorScheme: colorScheme,
-                metric: metric,
-                outerRadius: outerRadius,
-                isCalibrating: isCalibrating,
-                onTap: logReading,
-                filterBSSID: selectedBSSID,
-                isDeleteMode: isDeleteMode,
-                onDelete: deleteReading
-            )
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                FloorPlanView(
+                    document: document,
+                    floor: $floor,
+                    activeBand: activeBand,
+                    showHeatmap: showHeatmap,
+                    colorScheme: colorScheme,
+                    metric: metric,
+                    outerRadius: outerRadius,
+                    isCalibrating: isCalibrating,
+                    onTap: logReading,
+                    filterBSSID: selectedBSSID,
+                    isDeleteMode: isDeleteMode,
+                    onDelete: deleteReading
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Divider()
+
+                HStack {
+                    calibrationStatus
+                    Spacer()
+                    if let best = latestBatch
+                        .filter({ $0.band == activeBand && (selectedSSID == nil || $0.ssid == selectedSSID) })
+                        .max(by: { $0.rssi < $1.rssi }) {
+                        Text("Last: \(best.rssi) dBm \u{2014} tap map to log")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("No signal on \(activeBand.displayName)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(8)
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
-
-            // Bottom bar
-            HStack {
-                calibrationStatus
-                Spacer()
-                if let best = latestBatch
-                    .filter({ $0.band == activeBand && (selectedSSID == nil || $0.ssid == selectedSSID) })
-                    .max(by: { $0.rssi < $1.rssi }) {
-                    Text("Last: \(best.rssi) dBm \u{2014} tap map to log")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("No signal on \(activeBand.displayName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            if showInspector {
+                Divider()
+                InspectorView(
+                    isScanning: isScanning,
+                    availableSSIDs: availableSSIDs,
+                    activeBand: $activeBand,
+                    selectedSSID: $selectedSSID,
+                    availableBSSIDs: availableBSSIDs,
+                    selectedBSSID: $selectedBSSID,
+                    showHeatmap: $showHeatmap,
+                    metric: $metric,
+                    colorScheme: $colorScheme,
+                    outerRadius: $outerRadius,
+                    isCalibrating: $isCalibrating,
+                    isDeleteMode: $isDeleteMode,
+                    onImport: importFloorPlan,
+                    onExport: exportFloorPlan
+                )
+                .frame(width: 260)
             }
-            .padding(8)
         }
         .onChange(of: activeBand)   { selectedBSSID = nil }
         .onChange(of: selectedSSID) { selectedBSSID = nil }
-        .toolbar { toolbarContent }
-        .navigationTitle(floor.name)
-    }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            Picker("Band", selection: $activeBand) {
-                ForEach(WiFiBand.allCases, id: \.self) { band in
-                    Text(band.displayName).tag(band)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 200)
-        }
-        ToolbarItem {
-            Picker("SSID", selection: $selectedSSID) {
-                Text("All").tag(Optional<String>.none)
-                ForEach(availableSSIDs, id: \.self) { ssid in
-                    Text(ssid).tag(Optional(ssid))
-                }
-            }
-            .frame(minWidth: 120)
-        }
-        ToolbarItem {
-            Picker("AP", selection: $selectedBSSID) {
-                Text("All APs").tag(Optional<String>.none)
-                ForEach(availableBSSIDs, id: \.self) { bssid in
-                    Text(bssid).tag(Optional(bssid))
-                }
-            }
-            .frame(minWidth: 130)
-            .help("Filter heatmap to a single access point by BSSID")
-        }
-        ToolbarItem {
-            Label(isScanning ? "Scanning\u{2026}" : "Idle",
-                  systemImage: isScanning ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
-                .foregroundStyle(isScanning ? .green : .secondary)
-        }
-        ToolbarItem {
-            HStack(spacing: 4) {
-                Toggle(isOn: $showHeatmap) {
-                    Label("Heatmap", systemImage: "thermometer.medium")
-                }
-                .toggleStyle(.button)
-                .help(showHeatmap ? "Hide heatmap" : "Show heatmap")
-                Toggle(isOn: $isDeleteMode) {
-                    Label("Delete Mode", systemImage: "minus.circle")
-                }
-                .toggleStyle(.button)
-                .help(isDeleteMode ? "Exit delete mode" : "Right-click any marker to delete it")
-                .tint(isDeleteMode ? .red : nil)
-                Button("Export\u{2026}") {
-                    exportFloorPlan()
-                }
-                .help("Export floor plan with heatmap as PNG")
-            }
-        }
-        ToolbarItem {
-            Picker("Colors", selection: $colorScheme) {
-                ForEach(HeatmapColorScheme.allCases, id: \.self) { scheme in
-                    Text(scheme.displayName).tag(scheme)
-                }
-            }
-            .frame(minWidth: 140)
-            .disabled(!showHeatmap)
-        }
-        ToolbarItem {
-            Picker("Metric", selection: $metric) {
-                ForEach(HeatmapMetric.allCases, id: \.self) { m in
-                    Text(m.displayName).tag(m)
-                }
-            }
-            .frame(minWidth: 110)
-            .disabled(!showHeatmap)
-            .help("Switch between RSSI, SNR, and Channel interference map")
-        }
-        ToolbarItem {
-            HStack(spacing: 4) {
-                Text("Fade:")
-                    .font(.caption)
-                    .foregroundStyle(showHeatmap ? .primary : .tertiary)
-                Slider(
-                    value: $outerRadius,
-                    in: IDWInterpolator.innerRadiusMeters...30,
-                    step: 0.5
-                )
-                .frame(width: 90)
-                .disabled(!showHeatmap)
-                Text("\(outerRadius, specifier: "%.0f")m")
-                    .font(.caption)
-                    .foregroundStyle(showHeatmap ? .primary : .tertiary)
-                    .frame(width: 24, alignment: .leading)
-            }
-        }
-        ToolbarItem {
-            Button(isCalibrating ? "Done Calibrating" : "Calibrate") {
-                isCalibrating.toggle()
-            }
-        }
-        ToolbarItem {
-            Button("Import Floor Plan\u{2026}") {
-                importFloorPlan()
-            }
-        }
     }
 
     private var calibrationStatus: some View {
         Group {
             if floor.calibration == nil {
-                Label("No calibration \u{2014} tap Calibrate before logging", systemImage: "exclamationmark.triangle")
+                Label("No calibration \u{2014} tap Calibrate in the inspector before logging", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
                     .font(.caption)
             } else {
@@ -216,7 +134,6 @@ struct FloorDetailView: View {
         um?.registerUndo(withTarget: document) { [floorID, sampleID, sample] doc in
             if let fi = doc.survey.floors.firstIndex(where: { $0.id == floorID }) {
                 doc.survey.floors[fi].samples.removeAll { $0.id == sampleID }
-                // Redo: re-add (isUndoing=true so this goes to redo stack)
                 um?.registerUndo(withTarget: doc) { [floorID, sample] doc2 in
                     if let fi2 = doc2.survey.floors.firstIndex(where: { $0.id == floorID }) {
                         doc2.survey.floors[fi2].samples.append(sample)
@@ -236,7 +153,6 @@ struct FloorDetailView: View {
         um?.registerUndo(withTarget: document) { [floorID, removed] doc in
             if let fi = doc.survey.floors.firstIndex(where: { $0.id == floorID }) {
                 doc.survey.floors[fi].samples.append(removed)
-                // Redo: re-delete (isUndoing=true so this goes to redo stack)
                 um?.registerUndo(withTarget: doc) { [floorID, sampleID = removed.id] doc2 in
                     if let fi2 = doc2.survey.floors.firstIndex(where: { $0.id == floorID }) {
                         doc2.survey.floors[fi2].samples.removeAll { $0.id == sampleID }
