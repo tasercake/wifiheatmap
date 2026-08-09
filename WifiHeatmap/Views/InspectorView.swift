@@ -38,6 +38,7 @@ struct InspectorView: View {
                             .foregroundStyle(isScanning ? .primary : .secondary)
                     }
                 }
+                .help("Continuous WiFi scan running in the background. Signal readings are captured each time you tap the floor plan.")
 
                 Picker("Band", selection: $activeBand) {
                     ForEach(WiFiBand.allCases, id: \.self) { band in
@@ -45,6 +46,7 @@ struct InspectorView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .help("Select the WiFi frequency band to scan and display. Choose the band your network operates on — most modern routers use 5 GHz.")
 
                 Picker("Network", selection: $selectedSSID) {
                     Text("All").tag(Optional<String>.none)
@@ -52,6 +54,7 @@ struct InspectorView: View {
                         Text(ssid).tag(Optional(ssid))
                     }
                 }
+                .help("Filter readings to a single network name (SSID). Use \u{201C}All\u{201D} to show every network detected on this band.")
             }
 
             Section("Filter") {
@@ -61,10 +64,12 @@ struct InspectorView: View {
                         Text(bssid).tag(Optional(bssid))
                     }
                 }
+                .help("Narrow the heatmap to one specific access point by its hardware address (BSSID). Useful when multiple APs share the same network name and you want to see each one\u{2019}s coverage area separately.")
             }
 
             Section("Heatmap") {
                 Toggle("Show Heatmap", isOn: $showHeatmap)
+                    .help("Overlay a color-coded signal map on the floor plan. Log at least a few readings first, and calibrate the scale so distances are accurate.")
             }
 
             Section {
@@ -73,12 +78,14 @@ struct InspectorView: View {
                         Text(m.displayName).tag(m)
                     }
                 }
+                .help("RSSI: raw received signal strength in dBm \u{2014} higher (less negative) is stronger. SNR: signal-to-noise ratio in dB \u{2014} measures connection quality independent of raw power. Channel: shows which WiFi channel dominates each area, useful for spotting interference between overlapping networks.")
 
                 Picker("Color Scheme", selection: $colorScheme) {
                     ForEach(HeatmapColorScheme.allCases, id: \.self) { scheme in
                         Text(scheme.displayName).tag(scheme)
                     }
                 }
+                .help("Blue \u{2192} Red: classic heatmap style, cold to hot. Red \u{2192} Green: traffic-light convention, weak to strong. Colorblind Safe: blue and orange palette, readable for deuteranopia and protanopia.")
 
                 LabeledContent("Fade Radius") {
                     HStack(spacing: 6) {
@@ -90,6 +97,7 @@ struct InspectorView: View {
                             .monospacedDigit()
                     }
                 }
+                .help("How far each reading\u{2019}s signal influence extends in real-world meters. Smaller values produce sharper, more localized blobs; larger values smooth the heatmap across bigger gaps between readings.")
             }
             .disabled(!showHeatmap)
 
@@ -102,16 +110,18 @@ struct InspectorView: View {
 
             Section("Survey") {
                 Toggle("Calibration Mode", isOn: $isCalibrating)
-                    .help("Mark two reference points to set the map scale")
+                    .help("Set the real-world scale by tapping two points of known distance on the floor plan. Required before logging readings \u{2014} without calibration the fade radius and distance calculations will be inaccurate.")
 
                 Toggle("Delete Mode", isOn: $isDeleteMode)
                     .tint(isDeleteMode ? .red : nil)
-                    .help("Click a reading to delete it; right-click for context menu")
+                    .help("Click any reading marker on the map to remove it. Right-click a marker at any time to get a context menu with a delete option.")
             }
 
             Section("Floor Plan") {
                 Button("Import Floor Plan\u{2026}", action: onImport)
+                    .help("Load a floor plan image (PNG, JPEG, or PDF) as the background for this floor. The image is stored inside the survey document.")
                 Button("Export as PNG\u{2026}", action: onExport)
+                    .help("Save the floor plan with the heatmap composited on top as a PNG image. If the heatmap is hidden, only the floor plan is exported.")
             }
         }
         .formStyle(.grouped)

@@ -108,6 +108,7 @@ struct FloorTabItem: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { onSelect() }
+        .help("Click to switch to this floor. Right-click to rename or delete it.")
         .contextMenu {
             Button("Rename") { startEditing() }
             Divider()
