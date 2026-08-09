@@ -30,6 +30,7 @@
 		AA51465766E550E2FA030973 /* FloorDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9803C800988DA27B15F6352 /* FloorDetailView.swift */; };
 		ABC3DA80EA17A3E7D5ECE155 /* HeatmapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFBCBD61022CEA45ACF70951 /* HeatmapCanvas.swift */; };
 		AF5B46FB79998F082518FEB5 /* LocationAuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0A4D1AAE384A3B67E97532 /* LocationAuthManager.swift */; };
+		B629BFE1FDC94E886A6079FB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7992257BEB9560ED69171A85 /* Assets.xcassets */; };
 		BB09945F2C385EC53126178D /* WiFiBand.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1DD8456355428BEE8750C2 /* WiFiBand.swift */; };
 		BE2FA99BB30BCA831C4D7499 /* ScanActor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83066FF3779B2046A6ACB39A /* ScanActor.swift */; };
 		CCC2EF9D3581FFCA8FDE65B1 /* FloorSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D432ACDCEAED68CD8CBE094 /* FloorSidebarView.swift */; };
@@ -64,6 +65,7 @@
 		606187A431D445BFCB52467B /* WifiHeatmapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WifiHeatmapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B096AC9C671EFD116B52608 /* CalibrationOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationOverlayView.swift; sourceTree = "<group>"; };
 		76F3E1DE1E6FBB76B8495C0F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7992257BEB9560ED69171A85 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7A48603FB4704A5DCE1F337F /* ExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportTests.swift; sourceTree = "<group>"; };
 		7DE565D6241B6049924027BE /* WifiHeatmapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WifiHeatmapTests.swift; sourceTree = "<group>"; };
 		83066FF3779B2046A6ACB39A /* ScanActor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanActor.swift; sourceTree = "<group>"; };
@@ -119,6 +121,7 @@
 		9D04F6660A5D06DB8A2EF501 /* WifiHeatmap */ = {
 			isa = PBXGroup;
 			children = (
+				7992257BEB9560ED69171A85 /* Assets.xcassets */,
 				76F3E1DE1E6FBB76B8495C0F /* Info.plist */,
 				9208E124B0A7C6A384D8F78C /* WifiHeatmap.entitlements */,
 				837E7BDF7E4D341C94A7CF8E /* WifiHeatmapApp.swift */,
@@ -203,6 +206,7 @@
 			buildConfigurationList = 875A598267D8425394FB6BDB /* Build configuration list for PBXNativeTarget "WifiHeatmap" */;
 			buildPhases = (
 				F2217343BD6807CEDEFDD144 /* Sources */,
+				1294548A90B4DE6019E29E97 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -248,6 +252,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1294548A90B4DE6019E29E97 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B629BFE1FDC94E886A6079FB /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		2DF5C5E72EFEC2FDA419984B /* Sources */ = {

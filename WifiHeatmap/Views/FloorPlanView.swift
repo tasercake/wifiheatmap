@@ -70,7 +70,20 @@ struct FloorPlanView: View {
                             guard rect.contains(loc) else { return }
                             let px = (loc.x - rect.origin.x) / rect.size.width  * imageNaturalSize.width
                             let py = (loc.y - rect.origin.y) / rect.size.height * imageNaturalSize.height
-                            onTap(CGPoint(x: px, y: py))
+                            if isDeleteMode {
+                                let candidates = floor.samples.filter {
+                                    $0.band == activeBand && (filterBSSID == nil || $0.bssid == filterBSSID)
+                                }
+                                let thresholdPx = 10.0 / rect.size.width * imageNaturalSize.width
+                                if let nearest = candidates.min(by: {
+                                    hypot($0.position.x - px, $0.position.y - py) <
+                                    hypot($1.position.x - px, $1.position.y - py)
+                                }), hypot(nearest.position.x - px, nearest.position.y - py) < thresholdPx {
+                                    onDelete(nearest.id)
+                                }
+                            } else {
+                                onTap(CGPoint(x: px, y: py))
+                            }
                         }
                 }
             }
