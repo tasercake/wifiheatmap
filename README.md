@@ -24,7 +24,7 @@ Useful for:
 ## Building
 
 ```bash
-git clone git@github.com:jhludwig/wifiheatmap.git
+git clone git@github.com:tasercake/wifiheatmap.git
 cd wifiheatmap
 xcodegen generate
 open WifiHeatmap.xcodeproj
