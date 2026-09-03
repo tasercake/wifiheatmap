@@ -4,7 +4,7 @@ import SwiftUI
 struct WifiHeatmapApp: App {
     var body: some Scene {
         DocumentGroup(newDocument: { WifiSurveyDocument() }) { config in
-            ContentView(document: config.document)
+            ContentView(document: config.document, fileURL: config.fileURL)
         }
     }
 }

@@ -4,35 +4,49 @@ import ImageIO
 struct FloorPlanView: View {
     @ObservedObject var document: WifiSurveyDocument
     @Binding var floor: Floor
-    let activeBand: WiFiBand
+    let sampleFilter: SampleFilter
     let showHeatmap: Bool
+    let showContours: Bool
+    let contourSmoothingMeters: Double
     let colorScheme: HeatmapColorScheme
     let metric: HeatmapMetric
+    let valueRange: HeatmapValueRange
     let outerRadius: Double
     let isCalibrating: Bool
     let onTap: (CGPoint) -> Void
-    var filterBSSID: String? = nil
     var isDeleteMode: Bool = false
     var onDelete: (UUID) -> Void = { _ in }
 
     @State private var heatmapImage: CGImage? = nil
+    @State private var contourImage: CGImage? = nil
     @State private var renderTask: Task<Void, Never>? = nil
+
+    private var filteredSamples: [WifiSample] {
+        sampleFilter.apply(to: floor.points)
+    }
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 floorPlanImage(geo.size)
                 HeatmapCanvas(image: showHeatmap ? heatmapImage : nil, displayRect: imageRect(in: geo.size))
+                HeatmapCanvas(
+                    image: showContours ? contourImage : nil,
+                    displayRect: imageRect(in: geo.size),
+                    opacity: 1
+                )
                 SampleMarkersView(
-                    samples: floor.samples.filter {
-                        $0.band == activeBand && (filterBSSID == nil || $0.bssid == filterBSSID)
-                    },
+                    samples: filteredSamples,
                     imageSize: imageNaturalSize,
                     displayRect: imageRect(in: geo.size),
                     isDeleteMode: isDeleteMode
                 )
                 if showHeatmap {
-                    HeatmapLegendView(colorScheme: colorScheme, metric: metric)
+                    HeatmapLegendView(
+                        colorScheme: colorScheme,
+                        metric: metric,
+                        valueRange: valueRange
+                    )
                         .padding(12)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                         .allowsHitTesting(false)
@@ -47,9 +61,7 @@ struct FloorPlanView: View {
                 // up to the ZStack's onTapGesture since circles have no tap handler.
                 Group {
                     let rect = imageRect(in: geo.size)
-                    ForEach(floor.samples.filter {
-                        $0.band == activeBand && (filterBSSID == nil || $0.bssid == filterBSSID)
-                    }) { sample in
+                    ForEach(filteredSamples) { sample in
                         Color.clear
                             .frame(width: 18, height: 18)
                             .contentShape(Circle())
@@ -75,9 +87,7 @@ struct FloorPlanView: View {
                 let px = (loc.x - rect.origin.x) / rect.size.width  * imageNaturalSize.width
                 let py = (loc.y - rect.origin.y) / rect.size.height * imageNaturalSize.height
                 if isDeleteMode {
-                    let candidates = floor.samples.filter {
-                        $0.band == activeBand && (filterBSSID == nil || $0.bssid == filterBSSID)
-                    }
+                    let candidates = filteredSamples
                     let thresholdPx = 10.0 / rect.size.width * imageNaturalSize.width
                     if let nearest = candidates.min(by: {
                         hypot($0.position.x - px, $0.position.y - py) <
@@ -90,12 +100,15 @@ struct FloorPlanView: View {
                 }
             }
         }
-        .onChange(of: floor.samples.count) { recomputeHeatmap() }
-        .onChange(of: activeBand)          { recomputeHeatmap() }
+        .onChange(of: floor.points.count) { recomputeHeatmap() }
+        .onChange(of: sampleFilter)        { recomputeHeatmap() }
         .onChange(of: colorScheme)         { recomputeHeatmap() }
         .onChange(of: metric)              { recomputeHeatmap() }
+        .onChange(of: valueRange)          { recomputeHeatmap() }
         .onChange(of: outerRadius)         { recomputeHeatmap() }
-        .onChange(of: filterBSSID)         { recomputeHeatmap() }
+        .onChange(of: showHeatmap)          { recomputeHeatmap() }
+        .onChange(of: showContours)         { recomputeHeatmap() }
+        .onChange(of: contourSmoothingMeters) { recomputeHeatmap() }
         .onAppear { recomputeHeatmap() }
         .onDisappear { renderTask?.cancel() }
     }
@@ -144,20 +157,37 @@ struct FloorPlanView: View {
 
     private func recomputeHeatmap() {
         renderTask?.cancel()
-        guard let cal = floor.calibration else { heatmapImage = nil; return }
-        let samples = filterBSSID.map { bssid in floor.samples.filter { $0.bssid == bssid } }
-                      ?? floor.samples
-        let band    = activeBand
+        guard let cal = floor.calibration else {
+            heatmapImage = nil
+            contourImage = nil
+            return
+        }
+        let samples = filteredSamples
+        let band    = sampleFilter.band
         let scheme  = colorScheme
         let radius  = outerRadius
         let met     = metric
+        let range   = valueRange
         let imgSize = imageNaturalSize
+        let includeHeatmap = showHeatmap
+        let includeContours = showContours && metric != .channel
+        let smoothing = contourSmoothingMeters
         renderTask = Task.detached(priority: .userInitiated) {
             let grid = IDWInterpolator.interpolate(samples: samples, calibration: cal, band: band,
                                                    imageSize: imgSize, outerRadius: radius, metric: met)
-            let img  = HeatmapRenderer.render(grid: grid, colorScheme: scheme, metric: met)
+            let heatmap = includeHeatmap ? HeatmapRenderer.render(
+                grid: grid, colorScheme: scheme, metric: met, valueRange: range
+            ) : nil
+            let contours = includeContours ? ContourRenderer.render(
+                grid: grid, metric: met, valueRange: range,
+                calibration: cal, imageSize: imgSize,
+                smoothingMeters: smoothing
+            ) : nil
             guard !Task.isCancelled else { return }
-            await MainActor.run { heatmapImage = img }
+            await MainActor.run {
+                heatmapImage = heatmap
+                contourImage = contours
+            }
         }
     }
 }

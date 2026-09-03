@@ -5,23 +5,30 @@ struct InspectorView: View {
     let isScanning: Bool
     let availableSSIDs: [String]
     @Binding var activeBand: WiFiBand
-    @Binding var selectedSSID: String?
+    @Binding var selectedSSIDs: Set<String>
+    @Binding var trackedBands: Set<WiFiBand>
 
     // Filter
     let availableBSSIDs: [String]
-    @Binding var selectedBSSID: String?
+    @Binding var selectedBSSIDs: Set<String>
 
     // Heatmap
     @Binding var showHeatmap: Bool
+    @Binding var showContours: Bool
+    @Binding var contourSmoothingMeters: Double
     @Binding var metric: HeatmapMetric
     @Binding var colorScheme: HeatmapColorScheme
+    @Binding var rssiRange: HeatmapValueRange
+    @Binding var snrRange: HeatmapValueRange
     @Binding var outerRadius: Double
 
     // Survey modes
     @Binding var isCalibrating: Bool
     @Binding var isDeleteMode: Bool
+    let hasRecordedPoints: Bool
 
     // Callbacks
+    let onClearAll: () -> Void
     let onImport: () -> Void
     let onExport: () -> Void
 
@@ -38,7 +45,7 @@ struct InspectorView: View {
                             .foregroundStyle(isScanning ? .primary : .secondary)
                     }
                 }
-                .help("Continuous WiFi scan running in the background. Signal readings are captured each time you tap the floor plan.")
+                .help("The scanner stays idle until you tap the calibrated floor plan. Each tap stores the complete result of one successful CoreWLAN scan; sidebar selections only change what is displayed.")
 
                 Picker("Band", selection: $activeBand) {
                     ForEach(WiFiBand.allCases, id: \.self) { band in
@@ -46,30 +53,67 @@ struct InspectorView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .help("Select the WiFi frequency band to scan and display. Choose the band your network operates on — most modern routers use 5 GHz.")
+                .help("Choose which recorded WiFi band to display on the floor plan and heatmap.")
 
-                Picker("Network", selection: $selectedSSID) {
-                    Text("All").tag(Optional<String>.none)
-                    ForEach(availableSSIDs, id: \.self) { ssid in
-                        Text(ssid).tag(Optional(ssid))
+                LabeledContent("Track Bands") {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(WiFiBand.allCases, id: \.self) { band in
+                            Toggle(band.displayName, isOn: trackedBandBinding(band))
+                                .toggleStyle(.checkbox)
+                                .disabled(trackedBands == [band])
+                        }
                     }
                 }
-                .help("Filter readings to a single network name (SSID). Use \u{201C}All\u{201D} to show every network detected on this band.")
+                .disabled(isScanning)
+                .help("Choose which bands future points must contain and record. At least one band must remain enabled; existing points are unchanged.")
+
+                LabeledContent("Networks") {
+                    MultiSelectionMenu(
+                        allLabel: "All Networks",
+                        options: availableSSIDs,
+                        selection: $selectedSSIDs
+                    )
+                }
+                .disabled(isScanning)
+                .help("Select one or more required networks. The heatmap shows any selected network, and captures retry until every selected network appears on every tracked band. All requires only band coverage.")
             }
 
             Section("Filter") {
-                Picker("Access Point", selection: $selectedBSSID) {
-                    Text("All APs").tag(Optional<String>.none)
-                    ForEach(availableBSSIDs, id: \.self) { bssid in
-                        Text(bssid).tag(Optional(bssid))
-                    }
+                LabeledContent("Access Points") {
+                    MultiSelectionMenu(
+                        allLabel: "All APs",
+                        options: availableBSSIDs,
+                        selection: $selectedBSSIDs
+                    )
                 }
-                .help("Narrow the heatmap to one specific access point by its hardware address (BSSID). Useful when multiple APs share the same network name and you want to see each one\u{2019}s coverage area separately.")
+                .disabled(isScanning)
+                .help("Select one or more required access points. A capture retries until every selected BSSID appears on one of the tracked bands; a BSSID is not required on every band.")
             }
 
             Section("Heatmap") {
                 Toggle("Show Heatmap", isOn: $showHeatmap)
                     .help("Overlay a color-coded signal map on the floor plan. Log at least a few readings first, and calibrate the scale so distances are accurate.")
+
+                Toggle("Show Contours", isOn: $showContours)
+                    .disabled(metric == .channel)
+                    .help("Overlay labeled signal contours at 10 dB intervals. Crowded lines are automatically suppressed using the calibrated physical scale. Contours are unavailable for the Channel metric.")
+
+                if showContours {
+                    LabeledContent("Smoothing") {
+                        HStack(spacing: 6) {
+                            Slider(value: $contourSmoothingMeters, in: 0...3, step: 0.25)
+                            Text(contourSmoothingMeters == 0
+                                 ? "Off"
+                                 : "\(contourSmoothingMeters, specifier: "%.2g") m")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 42, alignment: .trailing)
+                                .monospacedDigit()
+                        }
+                    }
+                    .disabled(metric == .channel)
+                    .help("Smooth the calculated signal field before drawing contours. Higher values reduce point-scale bumps; zero preserves the raw interpolated field. Recorded readings and the heatmap are unchanged.")
+                }
             }
 
             Section {
@@ -85,7 +129,14 @@ struct InspectorView: View {
                         Text(scheme.displayName).tag(scheme)
                     }
                 }
-                .help("Blue \u{2192} Red: classic heatmap style, cold to hot. Red \u{2192} Green: traffic-light convention, weak to strong. Colorblind Safe: blue and orange palette, readable for deuteranopia and protanopia.")
+                .help("Red \u{2192} Blue: red is weak and blue is strong. Red \u{2192} Green: traffic-light convention, weak to strong. Colorblind Safe: blue and orange palette, readable for deuteranopia and protanopia.")
+
+                if metric != .channel {
+                    HeatmapRangeControl(
+                        range: metric == .rssi ? $rssiRange : $snrRange,
+                        metric: metric
+                    )
+                }
 
                 LabeledContent("Fade Radius") {
                     HStack(spacing: 6) {
@@ -99,11 +150,15 @@ struct InspectorView: View {
                 }
                 .help("How far each reading\u{2019}s signal influence extends in real-world meters. Smaller values produce sharper, more localized blobs; larger values smooth the heatmap across bigger gaps between readings.")
             }
-            .disabled(!showHeatmap)
+            .disabled(!showHeatmap && !showContours)
 
-            if showHeatmap {
+            if showHeatmap || showContours {
                 Section("Legend") {
-                    HeatmapLegendView(colorScheme: colorScheme, metric: metric)
+                    HeatmapLegendView(
+                        colorScheme: colorScheme,
+                        metric: metric,
+                        valueRange: metric == .rssi ? rssiRange : snrRange
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -115,6 +170,12 @@ struct InspectorView: View {
                 Toggle("Delete Mode", isOn: $isDeleteMode)
                     .tint(isDeleteMode ? .red : nil)
                     .help("Click any reading marker on the map to remove it. Right-click a marker at any time to get a context menu with a delete option.")
+
+                Button(role: .destructive, action: onClearAll) {
+                    Label("Clear All", systemImage: "trash")
+                }
+                .disabled(!hasRecordedPoints || isScanning)
+                .help("Delete every recorded point on the currently active floor. Use Undo to restore them.")
             }
 
             Section("Floor Plan") {
@@ -125,5 +186,196 @@ struct InspectorView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func trackedBandBinding(_ band: WiFiBand) -> Binding<Bool> {
+        Binding(
+            get: { trackedBands.contains(band) },
+            set: { enabled in
+                if enabled {
+                    trackedBands.insert(band)
+                } else if trackedBands.count > 1 {
+                    trackedBands.remove(band)
+                }
+            }
+        )
+    }
+}
+
+private struct MultiSelectionMenu: View {
+    let allLabel: String
+    let options: [String]
+    @Binding var selection: Set<String>
+
+    private var summary: String {
+        if selection.isEmpty { return allLabel }
+        if selection.count == 1 { return selection.first! }
+        return "\(selection.count) selected"
+    }
+
+    var body: some View {
+        Menu(summary) {
+            Button {
+                selection.removeAll()
+            } label: {
+                if selection.isEmpty {
+                    Label(allLabel, systemImage: "checkmark")
+                } else {
+                    Text(allLabel)
+                }
+            }
+
+            Divider()
+
+            ForEach(options, id: \.self) { option in
+                Toggle(option, isOn: optionBinding(option))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private func optionBinding(_ option: String) -> Binding<Bool> {
+        Binding(
+            get: { selection.contains(option) },
+            set: { selected in
+                if selected { selection.insert(option) }
+                else { selection.remove(option) }
+            }
+        )
+    }
+}
+
+private struct HeatmapRangeControl: View {
+    @Binding var range: HeatmapValueRange
+    let metric: HeatmapMetric
+
+    private var limits: ClosedRange<Double> {
+        metric == .rssi ? -120...0 : -20...100
+    }
+
+    private var unit: String {
+        metric == .rssi ? "dBm" : "dB"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Color Range")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            TwoSidedSlider(range: $range, limits: limits)
+                .frame(height: 22)
+
+            HStack(spacing: 6) {
+                TextField("Minimum", value: lowerBinding, format: .number.precision(.fractionLength(0...1)))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 62)
+                    .multilineTextAlignment(.trailing)
+                    .accessibilityLabel("Minimum \(metric.displayName)")
+
+                Text("to")
+                    .foregroundStyle(.secondary)
+
+                TextField("Maximum", value: upperBinding, format: .number.precision(.fractionLength(0...1)))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 62)
+                    .multilineTextAlignment(.trailing)
+                    .accessibilityLabel("Maximum \(metric.displayName)")
+
+                Text(unit)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+        }
+        .help("Values at or below the minimum use the weakest color; values at or above the maximum use the strongest color.")
+    }
+
+    private var lowerBinding: Binding<Double> {
+        Binding(
+            get: { range.lowerBound },
+            set: { value in
+                var updated = range
+                updated.setLowerBound(value, within: limits)
+                range = updated
+            }
+        )
+    }
+
+    private var upperBinding: Binding<Double> {
+        Binding(
+            get: { range.upperBound },
+            set: { value in
+                var updated = range
+                updated.setUpperBound(value, within: limits)
+                range = updated
+            }
+        )
+    }
+}
+
+private struct TwoSidedSlider: View {
+    @Binding var range: HeatmapValueRange
+    let limits: ClosedRange<Double>
+
+    private let thumbSize: CGFloat = 16
+
+    var body: some View {
+        GeometryReader { geometry in
+            let usableWidth = max(geometry.size.width - thumbSize, 1)
+            let lowerX = thumbSize / 2 + xPosition(for: range.lowerBound, width: usableWidth)
+            let upperX = thumbSize / 2 + xPosition(for: range.upperBound, width: usableWidth)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.25))
+                    .frame(height: 4)
+                    .padding(.horizontal, thumbSize / 2)
+
+                Capsule()
+                    .fill(Color.accentColor)
+                    .frame(width: max(upperX - lowerX, 0), height: 4)
+                    .offset(x: lowerX)
+
+                thumb(at: lowerX, label: "Minimum")
+                    .gesture(dragGesture(width: usableWidth, isLower: true))
+
+                thumb(at: upperX, label: "Maximum")
+                    .gesture(dragGesture(width: usableWidth, isLower: false))
+            }
+            .coordinateSpace(name: "twoSidedSlider")
+        }
+    }
+
+    private func thumb(at x: CGFloat, label: String) -> some View {
+        Circle()
+            .fill(Color(nsColor: .controlBackgroundColor))
+            .overlay(Circle().stroke(Color.accentColor, lineWidth: 2))
+            .frame(width: thumbSize, height: thumbSize)
+            .position(x: x, y: 11)
+            .contentShape(Rectangle().inset(by: -5))
+            .accessibilityLabel("\(label) heatmap bound")
+    }
+
+    private func dragGesture(width: CGFloat, isLower: Bool) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named("twoSidedSlider"))
+            .onChanged { gesture in
+                let value = value(at: gesture.location.x - thumbSize / 2, width: width)
+                var updated = range
+                if isLower {
+                    updated.setLowerBound(value, within: limits)
+                } else {
+                    updated.setUpperBound(value, within: limits)
+                }
+                range = updated
+            }
+    }
+
+    private func xPosition(for value: Double, width: CGFloat) -> CGFloat {
+        CGFloat((value - limits.lowerBound) / (limits.upperBound - limits.lowerBound)) * width
+    }
+
+    private func value(at x: CGFloat, width: CGFloat) -> Double {
+        let fraction = min(max(Double(x / width), 0), 1)
+        return (limits.lowerBound + fraction * (limits.upperBound - limits.lowerBound)).rounded()
     }
 }

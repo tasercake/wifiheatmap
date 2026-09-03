@@ -3,6 +3,7 @@ import SwiftUI
 struct HeatmapLegendView: View {
     let colorScheme: HeatmapColorScheme
     let metric: HeatmapMetric
+    let valueRange: HeatmapValueRange
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -42,20 +43,22 @@ struct HeatmapLegendView: View {
     }
 
     private func sampleGradientColor(t: Float) -> (UInt8, UInt8, UInt8) {
-        let (minV, maxV) = HeatmapRenderer.valueRange(for: metric)
+        let minV = Float(valueRange.lowerBound)
+        let maxV = Float(valueRange.upperBound)
         let value = minV + (maxV - minV) * t
         return HeatmapRenderer.gradientColor(value: value, min: minV, max: maxV, scheme: colorScheme)
     }
 
     private var rangeLabels: some View {
-        let (minV, maxV) = HeatmapRenderer.valueRange(for: metric)
+        let minV = valueRange.lowerBound
+        let maxV = valueRange.upperBound
         let unit = metric == .snr ? " dB" : " dBm"
         return HStack {
-            Text("\(Int(minV))\(unit)")
+            Text("\(minV, specifier: "%.0f")\(unit)")
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.8))
             Spacer()
-            Text("\(Int(maxV))\(unit)")
+            Text("\(maxV, specifier: "%.0f")\(unit)")
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.8))
         }
