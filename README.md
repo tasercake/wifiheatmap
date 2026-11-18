@@ -8,6 +8,8 @@ A macOS app for mapping WiFi signal coverage. Import a floor plan, walk around y
 
 WiFi Heatmap turns your MacBook into a survey instrument. You load a floor plan, set a scale reference, then walk to different spots in your space and tap the corresponding location on the map. The app records the WiFi signal at each point and interpolates a smooth heatmap across the floor plan showing where signal is strong, weak, or absent.
 
+![WiFi Heatmap showing 5 GHz signal strength and labeled contours on a floor plan](docs/images/wifi-heatmap-screenshot.png)
+
 Useful for:
 - Finding dead zones before placing a mesh node or extender
 - Verifying coverage after adding or repositioning an access point
