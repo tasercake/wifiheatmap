@@ -201,6 +201,56 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(decoded.points, [capture])
     }
 
+    func testSurveyPointRoundTripPreservesOptionalOrientation() throws {
+        let capture = SurveyPoint(
+            id: UUID(),
+            position: CGPoint(x: 55, y: 89),
+            startedAt: Date(timeIntervalSince1970: 2_000),
+            completedAt: Date(timeIntervalSince1970: 2_002),
+            scanCacheUpdated: true,
+            snapshotChanged: false,
+            attemptCount: 2,
+            readings: [
+                WifiNetworkReading(
+                    ssid: "Home", bssid: "5g", rssi: -57, noise: -94,
+                    band: .ghz5, channel: 44
+                )
+            ]
+        )
+        var json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoder.encode(capture)) as? [String: Any]
+        )
+        json["orientationDegrees"] = 137.5
+
+        let decoded = try decoder.decode(
+            SurveyPoint.self,
+            from: JSONSerialization.data(withJSONObject: json)
+        )
+        let encoded = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoder.encode(decoded)) as? [String: Any]
+        )
+
+        XCTAssertEqual(encoded["orientationDegrees"] as? Double, 137.5)
+    }
+
+    func testLegacySurveyPointWithoutOrientationDecodesAsNoOrientation() throws {
+        let capture = SurveyPoint(
+            id: UUID(), position: .zero,
+            startedAt: Date(timeIntervalSince1970: 10),
+            completedAt: Date(timeIntervalSince1970: 11),
+            scanCacheUpdated: false, snapshotChanged: nil, attemptCount: 1,
+            readings: []
+        )
+
+        let decoded = try decoder.decode(SurveyPoint.self, from: encoder.encode(capture))
+        let orientation = Mirror(reflecting: decoded).children.first {
+            $0.label == "orientationDegrees"
+        }
+
+        XCTAssertNotNil(orientation)
+        XCTAssertEqual(String(describing: try XCTUnwrap(orientation).value), "nil")
+    }
+
     func testV2CaptureDecodesLosslesslyAsSurveyPoint() throws {
         let legacyCapture = LegacyCapturePayload(
             id: UUID(),
@@ -281,7 +331,7 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(filtered[0].band, .ghz5)
     }
 
-    func testSampleFilterTreatsNilNetworkAndAccessPointAsAll() {
+    func testSampleFilterTreatsMissingDisplayNetworkAsNoMatches() {
         let samples = [
             sample(ssid: "Home", bssid: "ap-1", band: .ghz5),
             sample(ssid: "Guest", bssid: "ap-2", band: .ghz5),
@@ -291,8 +341,7 @@ final class ModelTests: XCTestCase {
         let filtered = SampleFilter(band: .ghz5, ssid: nil, bssid: nil)
             .apply(to: samples)
 
-        XCTAssertEqual(filtered.count, 2)
-        XCTAssertTrue(filtered.allSatisfy { $0.band == .ghz5 })
+        XCTAssertTrue(filtered.isEmpty)
     }
 
     func testSampleFilterProjectsTheStrongestMatchingReadingFromEachCapture() {
@@ -315,7 +364,7 @@ final class ModelTests: XCTestCase {
             ]
         )
 
-        let samples = SampleFilter(band: .ghz5, ssid: "Home", bssid: nil)
+        let samples = SampleFilter(band: .ghz5, ssid: "Home", bssids: [])
             .apply(to: [capture])
 
         XCTAssertEqual(samples.count, 1)
@@ -325,9 +374,55 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(samples[0].bssid, "strong")
     }
 
-    func testSampleFilterMatchesAnySelectedNetworkAndAccessPoint() {
+    func testDisplayFilterUsesStrongestSelectedAccessPointPerPoint() {
+        let capture = SurveyPoint(
+            id: UUID(),
+            position: CGPoint(x: 4, y: 8),
+            startedAt: Date(timeIntervalSince1970: 10),
+            completedAt: Date(timeIntervalSince1970: 11),
+            scanCacheUpdated: true,
+            snapshotChanged: true,
+            attemptCount: 1,
+            readings: [
+                WifiNetworkReading(ssid: "Home", bssid: "selected-weak", rssi: -72, noise: -92, band: .ghz5, channel: 36),
+                WifiNetworkReading(ssid: "Home", bssid: "selected-strong", rssi: -48, noise: -91, band: .ghz5, channel: 44),
+                WifiNetworkReading(ssid: "Home", bssid: "not-selected", rssi: -20, noise: -90, band: .ghz5, channel: 149),
+                WifiNetworkReading(ssid: "Guest", bssid: "selected-strong", rssi: -10, noise: -89, band: .ghz5, channel: 161)
+            ]
+        )
+
+        let samples = SampleFilter(
+            band: .ghz5,
+            ssid: "Home",
+            bssids: ["selected-weak", "selected-strong"]
+        ).apply(to: [capture])
+
+        XCTAssertEqual(samples.map(\.bssid), ["selected-strong"])
+        XCTAssertEqual(samples.map(\.rssi), [-48])
+    }
+
+    func testEmptyDisplayAccessPointSelectionUsesStrongestAccessPointForDisplayNetwork() {
+        let capture = SurveyPoint(
+            id: UUID(), position: .zero,
+            startedAt: Date(timeIntervalSince1970: 1),
+            completedAt: Date(timeIntervalSince1970: 2),
+            scanCacheUpdated: true, snapshotChanged: true, attemptCount: 1,
+            readings: [
+                WifiNetworkReading(ssid: "Home", bssid: "weak", rssi: -70, noise: -92, band: .ghz5, channel: 36),
+                WifiNetworkReading(ssid: "Home", bssid: "strong", rssi: -45, noise: -90, band: .ghz5, channel: 44),
+                WifiNetworkReading(ssid: "Guest", bssid: "guest", rssi: -10, noise: -89, band: .ghz5, channel: 149)
+            ]
+        )
+
+        let samples = SampleFilter(band: .ghz5, ssid: "Home", bssids: []).apply(to: [capture])
+
+        XCTAssertEqual(samples.map(\.bssid), ["strong"])
+    }
+
+    func testSampleFilterMatchesAnySelectedAccessPointForOneDisplayNetwork() {
         let samples = [
             sample(ssid: "Home", bssid: "home-5", band: .ghz5),
+            sample(ssid: "Home", bssid: "home-5b", band: .ghz5),
             sample(ssid: "Office", bssid: "office-5", band: .ghz5),
             sample(ssid: "Guest", bssid: "guest-5", band: .ghz5),
             sample(ssid: "Home", bssid: "home-2", band: .ghz2_4)
@@ -335,23 +430,23 @@ final class ModelTests: XCTestCase {
 
         let filtered = SampleFilter(
             band: .ghz5,
-            ssids: ["Home", "Office"],
-            bssids: ["home-5", "office-5"]
+            ssid: "Home",
+            bssids: ["home-5", "home-5b", "office-5"]
         ).apply(to: samples)
 
-        XCTAssertEqual(Set(filtered.map(\.ssid)), ["Home", "Office"])
-        XCTAssertEqual(Set(filtered.map(\.bssid)), ["home-5", "office-5"])
+        XCTAssertEqual(Set(filtered.map(\.ssid)), ["Home"])
+        XCTAssertEqual(Set(filtered.map(\.bssid)), ["home-5", "home-5b"])
     }
 
-    func testEmptyFilterSelectionsMeanAll() {
+    func testEmptyAccessPointSelectionMeansAllForOneDisplayNetwork() {
         let samples = [
             sample(ssid: "Home", bssid: "home-5", band: .ghz5),
             sample(ssid: "Guest", bssid: "guest-5", band: .ghz5)
         ]
 
-        let filtered = SampleFilter(band: .ghz5, ssids: [], bssids: []).apply(to: samples)
+        let filtered = SampleFilter(band: .ghz5, ssid: "Home", bssids: []).apply(to: samples)
 
-        XCTAssertEqual(filtered.count, 2)
+        XCTAssertEqual(filtered.map(\.ssid), ["Home"])
     }
 
     func testStandardHeatmapRangesUseUsefulRSSIAndSNRDefaults() {

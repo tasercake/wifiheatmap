@@ -22,8 +22,9 @@ private final class ScanCacheEventMonitor: NSObject, CWEventDelegate {
         condition.lock()
         defer { condition.unlock() }
 
-        if generation == token {
-            condition.wait(until: Date().addingTimeInterval(timeout))
+        let deadline = Date().addingTimeInterval(timeout)
+        while generation == token {
+            guard condition.wait(until: deadline) else { break }
         }
         return generation != token
     }
@@ -95,7 +96,10 @@ actor ScanActor {
             let snapshot = ScanSnapshot(networks: batch)
             let snapshotChanged = previousSnapshot.map { $0 != snapshot }
             let scanCacheUpdated = isMonitoringScanCache
-                && eventMonitor.didUpdate(after: eventToken, waiting: 0.15)
+                && eventMonitor.didUpdate(
+                    after: eventToken,
+                    waiting: ScanRetryPolicy.cacheEventWaitTimeout
+                )
 
             return ScanBatch(
                 networks: batch,

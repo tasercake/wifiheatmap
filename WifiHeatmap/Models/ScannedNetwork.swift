@@ -45,6 +45,7 @@ struct ScanBatch {
 enum FullScanPoint {
     static func record(
         at position: CGPoint,
+        orientationDegrees: Double? = nil,
         id: UUID = UUID(),
         scan: () async throws -> ScanBatch
     ) async throws -> SurveyPoint {
@@ -52,6 +53,7 @@ enum FullScanPoint {
         return SurveyPoint(
             id: id,
             position: position,
+            orientationDegrees: orientationDegrees,
             startedAt: batch.startedAt,
             completedAt: batch.completedAt,
             scanCacheUpdated: batch.scanCacheUpdated,
@@ -72,12 +74,50 @@ enum FullScanPoint {
 }
 
 enum ScanRetryPolicy {
-    static let unusuallyFastThreshold: TimeInterval = 0.75
+    // CoreWLAN can deliver the cache-update event shortly after scanForNetworks returns.
+    // Give the event callback a meaningful grace period before treating the batch as cached.
+    static let cacheEventWaitTimeout: TimeInterval = 1.0
 
     static func shouldRetry(_ batch: ScanBatch) -> Bool {
-        batch.duration < unusuallyFastThreshold
-            && batch.snapshotChanged == false
-            && !batch.scanCacheUpdated
+        !batch.scanCacheUpdated
+    }
+}
+
+enum NetworkDiscoveryCoordinator {
+    static func refresh(
+        maxAttempts: Int = PointCaptureCoordinator.maximumAttempts,
+        cacheRefreshBackoffNanoseconds: [UInt64] = PointCaptureCoordinator.standardCacheRefreshBackoffNanoseconds,
+        scan: (Int) async throws -> ScanBatch,
+        sleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
+    ) async throws -> ScanBatch {
+        let attemptLimit = max(1, maxAttempts)
+        var latestSuccessfulBatch: ScanBatch?
+        var latestError: Error?
+
+        for attempt in 1...attemptLimit {
+            do {
+                let batch = try await scan(attempt)
+                latestSuccessfulBatch = batch
+                if !ScanRetryPolicy.shouldRetry(batch) {
+                    return batch
+                }
+            } catch ScanActor.ScanError.interfaceUnavailable {
+                throw ScanActor.ScanError.interfaceUnavailable
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                latestError = error
+            }
+
+            guard attempt < attemptLimit else { break }
+            let delayIndex = min(attempt - 1, max(0, cacheRefreshBackoffNanoseconds.count - 1))
+            if !cacheRefreshBackoffNanoseconds.isEmpty {
+                try await sleep(cacheRefreshBackoffNanoseconds[delayIndex])
+            }
+        }
+
+        if let latestSuccessfulBatch { return latestSuccessfulBatch }
+        throw latestError ?? ScanActor.ScanError.failed("Wi-Fi discovery scan did not return a result")
     }
 }
 
@@ -98,13 +138,51 @@ struct CaptureRequirements: Equatable {
         self.requiredBSSIDBands = requiredBSSIDBands
         self.trackedBands = trackedBands
     }
+
+    var effectiveRecordBands: Set<WiFiBand> {
+        RecordBandPolicy.normalizedRecordBands(
+            trackedBands,
+            selectedBSSIDs: requiredBSSIDs,
+            knownBSSIDBands: requiredBSSIDBands
+        )
+    }
+
+    func recordBands(for networks: [ScannedNetwork]) -> Set<WiFiBand> {
+        effectiveRecordBands.union(
+            networks.compactMap { network in
+                requiredBSSIDs.contains(network.bssid) ? network.band : nil
+            }
+        )
+    }
+}
+
+enum RecordBandPolicy {
+    static func requiredBands(
+        selectedBSSIDs: Set<String>,
+        knownBSSIDBands: [String: WiFiBand]
+    ) -> Set<WiFiBand> {
+        Set(selectedBSSIDs.compactMap { knownBSSIDBands[$0] })
+    }
+
+    static func normalizedRecordBands(
+        _ recordBands: Set<WiFiBand>,
+        selectedBSSIDs: Set<String>,
+        knownBSSIDBands: [String: WiFiBand]
+    ) -> Set<WiFiBand> {
+        recordBands.union(requiredBands(
+            selectedBSSIDs: selectedBSSIDs,
+            knownBSSIDBands: knownBSSIDBands
+        ))
+    }
 }
 
 enum CaptureRetryReason: Equatable {
     case potentiallyStale
     case missingSSIDs(Set<String>)
     case missingBSSIDs(Set<String>)
-    case missingBands(Set<WiFiBand>)
+    case missingRequirements(ssids: Set<String>, bssids: Set<String>)
+    case noRecordBandsSelected
+    case noNetworksOnRecordBands(Set<WiFiBand>)
     case scanFailed(String)
 
     var message: String {
@@ -112,20 +190,53 @@ enum CaptureRetryReason: Equatable {
         case .potentiallyStale:
             return "Results may be cached"
         case .missingSSIDs(let ssids):
-            return "Missing network: \(ssids.sorted().joined(separator: ", "))"
+            return "Missing required SSID: \(ssids.sorted().joined(separator: ", "))"
         case .missingBSSIDs(let bssids):
-            return "Missing access point: \(bssids.sorted().joined(separator: ", "))"
-        case .missingBands(let bands):
-            return "Missing required band data: \(bands.sorted { $0.displayName < $1.displayName }.map(\.displayName).joined(separator: ", "))"
+            return "Missing required BSSID: \(bssids.sorted().joined(separator: ", "))"
+        case .missingRequirements(let ssids, let bssids):
+            return [
+                Self.missingSSIDMessage(ssids),
+                Self.missingBSSIDMessage(bssids)
+            ].joined(separator: " · ")
+        case .noRecordBandsSelected:
+            return "Select at least one Record Band"
+        case .noNetworksOnRecordBands(let bands):
+            let names = bands
+                .sorted { $0.displayName < $1.displayName }
+                .map(\.displayName)
+                .joined(separator: ", ")
+            return "No networks were observed on the selected Record Bands: \(names)"
         case .scanFailed(let message):
             return message
         }
+    }
+
+    var summaryLines: [String] {
+        switch self {
+        case .missingRequirements(let ssids, let bssids):
+            return [Self.missingSSIDMessage(ssids), Self.missingBSSIDMessage(bssids)]
+        default:
+            return [message]
+        }
+    }
+
+    private static func missingSSIDMessage(_ ssids: Set<String>) -> String {
+        "Missing required SSID: \(ssids.sorted().joined(separator: ", "))"
+    }
+
+    private static func missingBSSIDMessage(_ bssids: Set<String>) -> String {
+        "Missing required BSSID: \(bssids.sorted().joined(separator: ", "))"
     }
 }
 
 enum CaptureProgress: Equatable {
     case scanning(attempt: Int, maxAttempts: Int)
-    case retrying(reason: CaptureRetryReason, nextAttempt: Int, maxAttempts: Int)
+    case retrying(
+        reason: CaptureRetryReason,
+        nextAttempt: Int,
+        maxAttempts: Int,
+        delayNanoseconds: UInt64
+    )
 }
 
 struct PointCaptureError: LocalizedError, Equatable {
@@ -133,26 +244,40 @@ struct PointCaptureError: LocalizedError, Equatable {
     let attempts: Int
 
     var errorDescription: String? {
-        "No complete reading after \(attempts) attempts. \(reason.message)."
+        (["No complete reading after \(attempts) attempts."] + reason.summaryLines)
+            .joined(separator: "\n")
+    }
+}
+
+enum RetryCountdown {
+    static func secondsRemaining(until retryAt: Date, at now: Date) -> Int {
+        max(0, Int(ceil(retryAt.timeIntervalSince(now))))
     }
 }
 
 enum PointCaptureCoordinator {
-    static let maximumAttempts = 4
-    static let standardBackoffNanoseconds: [UInt64] = [500_000_000, 1_000_000_000, 2_000_000_000]
+    static let maximumAttempts = 5
+    static let minimumRetryDelayNanoseconds: UInt64 = 5_000_000_000
+    static let standardBackoffNanoseconds: [UInt64] = Array(
+        repeating: minimumRetryDelayNanoseconds,
+        count: maximumAttempts - 1
+    )
+    static let standardCacheRefreshBackoffNanoseconds = standardBackoffNanoseconds
 
     static func capture(
         at position: CGPoint,
+        orientationDegrees: Double? = nil,
         id: UUID = UUID(),
         requirements: CaptureRequirements,
         maxAttempts: Int = maximumAttempts,
         backoffNanoseconds: [UInt64] = standardBackoffNanoseconds,
+        cacheRefreshBackoffNanoseconds: [UInt64] = standardCacheRefreshBackoffNanoseconds,
         scan: (Int) async throws -> ScanBatch,
         sleep: (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) },
         onProgress: (CaptureProgress) -> Void = { _ in }
     ) async throws -> SurveyPoint {
-        guard !requirements.trackedBands.isEmpty else {
-            throw PointCaptureError(reason: .missingBands([]), attempts: 0)
+        guard !requirements.effectiveRecordBands.isEmpty else {
+            throw PointCaptureError(reason: .noRecordBandsSelected, attempts: 0)
         }
 
         var lastReason = CaptureRetryReason.scanFailed("The scan did not run")
@@ -165,7 +290,8 @@ enum PointCaptureCoordinator {
                 if let reason = rejectionReason(for: batch, requirements: requirements) {
                     lastReason = reason
                 } else {
-                    let trackedNetworks = batch.networks.filter { requirements.trackedBands.contains($0.band) }
+                    let recordBands = requirements.recordBands(for: batch.networks)
+                    let trackedNetworks = batch.networks.filter { recordBands.contains($0.band) }
                     let acceptedBatch = ScanBatch(
                         networks: trackedNetworks,
                         startedAt: batch.startedAt,
@@ -174,7 +300,11 @@ enum PointCaptureCoordinator {
                         snapshotChanged: batch.snapshotChanged,
                         attemptCount: attempt
                     )
-                    return try await FullScanPoint.record(at: position, id: id) { acceptedBatch }
+                    return try await FullScanPoint.record(
+                        at: position,
+                        orientationDegrees: orientationDegrees,
+                        id: id
+                    ) { acceptedBatch }
                 }
             } catch ScanActor.ScanError.interfaceUnavailable {
                 throw ScanActor.ScanError.interfaceUnavailable
@@ -187,11 +317,20 @@ enum PointCaptureCoordinator {
             guard attempt < attemptLimit else {
                 throw PointCaptureError(reason: lastReason, attempts: attempt)
             }
-            onProgress(.retrying(reason: lastReason, nextAttempt: attempt + 1, maxAttempts: attemptLimit))
-            let delayIndex = min(attempt - 1, max(0, backoffNanoseconds.count - 1))
-            if !backoffNanoseconds.isEmpty {
-                try await sleep(backoffNanoseconds[delayIndex])
-            }
+            let retryDelays = lastReason == .potentiallyStale
+                ? cacheRefreshBackoffNanoseconds
+                : backoffNanoseconds
+            let configuredDelay = retryDelays.isEmpty
+                ? minimumRetryDelayNanoseconds
+                : retryDelays[min(attempt - 1, retryDelays.count - 1)]
+            let delay = max(minimumRetryDelayNanoseconds, configuredDelay)
+            onProgress(.retrying(
+                reason: lastReason,
+                nextAttempt: attempt + 1,
+                maxAttempts: attemptLimit,
+                delayNanoseconds: delay
+            ))
+            try await sleep(delay)
         }
 
         throw PointCaptureError(reason: lastReason, attempts: attemptLimit)
@@ -205,37 +344,26 @@ enum PointCaptureCoordinator {
             return .potentiallyStale
         }
 
-        let tracked = batch.networks.filter { requirements.trackedBands.contains($0.band) }
+        let recordBands = requirements.recordBands(for: batch.networks)
+        let tracked = batch.networks.filter { recordBands.contains($0.band) }
+        if tracked.isEmpty {
+            return .noNetworksOnRecordBands(recordBands)
+        }
+
         let presentSSIDs = Set(tracked.map(\.ssid))
         let missingSSIDs = requirements.requiredSSIDs.subtracting(presentSSIDs)
+        let missingBSSIDs = requirements.requiredBSSIDs.filter { bssid in
+            !tracked.contains { $0.bssid == bssid }
+        }
+
+        if !missingSSIDs.isEmpty && !missingBSSIDs.isEmpty {
+            return .missingRequirements(ssids: missingSSIDs, bssids: Set(missingBSSIDs))
+        }
         if !missingSSIDs.isEmpty {
             return .missingSSIDs(missingSSIDs)
         }
-
-        let applicableBSSIDs = requirements.requiredBSSIDs.filter { bssid in
-            guard let band = requirements.requiredBSSIDBands[bssid] else { return true }
-            return requirements.trackedBands.contains(band)
-        }
-        let missingBSSIDs = applicableBSSIDs.filter { bssid in
-            guard let knownBand = requirements.requiredBSSIDBands[bssid] else {
-                return !tracked.contains { $0.bssid == bssid }
-            }
-            return !tracked.contains { $0.bssid == bssid && $0.band == knownBand }
-        }
         if !missingBSSIDs.isEmpty {
             return .missingBSSIDs(Set(missingBSSIDs))
-        }
-
-        let missingBands = requirements.trackedBands.filter { band in
-            if requirements.requiredSSIDs.isEmpty {
-                return !tracked.contains { $0.band == band }
-            }
-            return requirements.requiredSSIDs.contains { requiredSSID in
-                !tracked.contains { $0.band == band && $0.ssid == requiredSSID }
-            }
-        }
-        if !missingBands.isEmpty {
-            return .missingBands(Set(missingBands))
         }
 
         return nil

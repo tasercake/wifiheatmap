@@ -12,12 +12,53 @@ struct WifiNetworkReading: Codable, Equatable {
 struct SurveyPoint: Codable, Identifiable, Equatable {
     var id: UUID
     var position: CGPoint
+    var orientationDegrees: Double?
     var startedAt: Date
     var completedAt: Date
     var scanCacheUpdated: Bool
     var snapshotChanged: Bool?
     var attemptCount: Int
     var readings: [WifiNetworkReading]
+
+    init(
+        id: UUID,
+        position: CGPoint,
+        orientationDegrees: Double? = nil,
+        startedAt: Date,
+        completedAt: Date,
+        scanCacheUpdated: Bool,
+        snapshotChanged: Bool?,
+        attemptCount: Int,
+        readings: [WifiNetworkReading]
+    ) {
+        self.id = id
+        self.position = position
+        self.orientationDegrees = orientationDegrees
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.scanCacheUpdated = scanCacheUpdated
+        self.snapshotChanged = snapshotChanged
+        self.attemptCount = attemptCount
+        self.readings = readings
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, position, orientationDegrees, startedAt, completedAt
+        case scanCacheUpdated, snapshotChanged, attemptCount, readings
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        position = try container.decode(CGPoint.self, forKey: .position)
+        orientationDegrees = try container.decodeIfPresent(Double.self, forKey: .orientationDegrees)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        completedAt = try container.decode(Date.self, forKey: .completedAt)
+        scanCacheUpdated = try container.decode(Bool.self, forKey: .scanCacheUpdated)
+        snapshotChanged = try container.decodeIfPresent(Bool.self, forKey: .snapshotChanged)
+        attemptCount = try container.decode(Int.self, forKey: .attemptCount)
+        readings = try container.decode([WifiNetworkReading].self, forKey: .readings)
+    }
 
     var duration: TimeInterval {
         max(0, completedAt.timeIntervalSince(startedAt))
@@ -66,36 +107,38 @@ struct WifiSample: Codable, Identifiable, Equatable {
 
 struct SampleFilter: Equatable {
     let band: WiFiBand
-    let ssids: Set<String>
+    let ssid: String?
     let bssids: Set<String>
 
-    init(band: WiFiBand, ssids: Set<String>, bssids: Set<String>) {
+    init(band: WiFiBand, ssid: String?, bssids: Set<String>) {
         self.band = band
-        self.ssids = ssids
+        self.ssid = ssid
         self.bssids = bssids
     }
 
     init(band: WiFiBand, ssid: String?, bssid: String?) {
         self.init(
             band: band,
-            ssids: ssid.map { [$0] } ?? [],
+            ssid: ssid,
             bssids: bssid.map { [$0] } ?? []
         )
     }
 
     func apply(to samples: [WifiSample]) -> [WifiSample] {
-        samples.filter { sample in
+        guard let ssid else { return [] }
+        return samples.filter { sample in
             sample.band == band
-                && (ssids.isEmpty || ssids.contains(sample.ssid))
+                && sample.ssid == ssid
                 && (bssids.isEmpty || bssids.contains(sample.bssid))
         }
     }
 
     func apply(to points: [SurveyPoint]) -> [WifiSample] {
-        points.compactMap { point in
+        guard let ssid else { return [] }
+        return points.compactMap { point in
             let readings = point.readings.filter { reading in
                 reading.band == band
-                    && (ssids.isEmpty || ssids.contains(reading.ssid))
+                    && reading.ssid == ssid
                     && (bssids.isEmpty || bssids.contains(reading.bssid))
             }
             guard let best = readings.max(by: { $0.rssi < $1.rssi }) else {

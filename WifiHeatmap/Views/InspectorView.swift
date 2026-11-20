@@ -1,40 +1,157 @@
 import SwiftUI
+import AppKit
+
+struct RequiredBSSIDSelectionInitializer {
+    private var hasFinished = false
+
+    mutating func selectionToApply(
+        defaultsToAll: Bool,
+        hasRequiredSSIDs: Bool,
+        hasCompletedRequiredSSIDScan: Bool,
+        groups: [BSSIDOptionGroup],
+        currentSelection: Set<String>,
+        recordBands: Set<WiFiBand> = Set(WiFiBand.allCases)
+    ) -> Set<String>? {
+        guard !hasFinished else { return nil }
+        guard defaultsToAll else {
+            hasFinished = true
+            return nil
+        }
+        guard currentSelection.isEmpty else {
+            hasFinished = true
+            return nil
+        }
+        guard hasRequiredSSIDs else { return nil }
+        guard hasCompletedRequiredSSIDScan else { return nil }
+
+        let availableBSSIDs = Set(groups
+            .flatMap(\.options)
+            .filter { option in
+                guard let band = option.band else { return false }
+                return recordBands.contains(band)
+            }
+            .map(\.bssid))
+        guard !availableBSSIDs.isEmpty else { return nil }
+        hasFinished = true
+        return availableBSSIDs
+    }
+}
 
 struct InspectorView: View {
+    @State private var isConfirmingClearAll = false
+    @State private var isConfirmingDeleteScan = false
+    @State private var isCreatingScan = false
+    @State private var isRenamingScan = false
+    @State private var newScanName = ""
+    @State private var scanName = ""
+    @State private var scanPendingDeletion: ScanSet?
+    @State private var requiredBSSIDSelectionInitializer = RequiredBSSIDSelectionInitializer()
+    @FocusState private var isScanNameFocused: Bool
+
     // Scanning
+    let scanSets: [ScanSet]
+    @Binding var activeScanID: UUID?
     let isScanning: Bool
     let availableSSIDs: [String]
-    @Binding var activeBand: WiFiBand
-    @Binding var selectedSSIDs: Set<String>
+    @Binding var requiredSSIDs: Set<String>
     @Binding var trackedBands: Set<WiFiBand>
-
-    // Filter
-    let availableBSSIDs: [String]
-    @Binding var selectedBSSIDs: Set<String>
-
-    // Heatmap
-    @Binding var showHeatmap: Bool
-    @Binding var showContours: Bool
-    @Binding var contourSmoothingMeters: Double
-    @Binding var metric: HeatmapMetric
-    @Binding var colorScheme: HeatmapColorScheme
-    @Binding var rssiRange: HeatmapValueRange
-    @Binding var snrRange: HeatmapValueRange
-    @Binding var outerRadius: Double
+    let discoveredBands: Set<WiFiBand>
+    let requiredRecordBands: Set<WiFiBand>
+    let availableBSSIDGroups: [BSSIDOptionGroup]
+    @Binding var requiredBSSIDs: Set<String>
+    let defaultsRequiredBSSIDsToAll: Bool
+    let hasCompletedRequiredSSIDScan: Bool
+    let onDefaultRequiredBSSIDsApplied: (Set<String>) -> Void
+    let activeOnboardingTip: OnboardingTipID?
+    let onDismissOnboardingTip: (OnboardingTipID) -> Void
+    let onRequiredSSIDMenuPresentationChanged: (Bool) -> Void
+    let onRequiredBSSIDMenuPresentationChanged: (Bool) -> Void
 
     // Survey modes
-    @Binding var isCalibrating: Bool
     @Binding var isDeleteMode: Bool
     let hasRecordedPoints: Bool
 
     // Callbacks
+    let onNewScan: (String) -> Void
+    let onRenameScan: (String) -> Void
+    let onDeleteScan: (UUID) -> Void
     let onClearAll: () -> Void
-    let onImport: () -> Void
-    let onExport: () -> Void
+    let onRefreshNetworks: () -> Void
+
+    private var activeScan: ScanSet? {
+        guard let activeScanID else { return nil }
+        return scanSets.first { $0.id == activeScanID }
+    }
 
     var body: some View {
         Form {
-            Section("Scanning") {
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Scan")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 6) {
+                        if isRenamingScan {
+                            TextField("Scan name", text: $scanName)
+                                .textFieldStyle(.roundedBorder)
+                                .focused($isScanNameFocused)
+                                .onSubmit(finishRenamingScan)
+                                .onExitCommand(perform: cancelRenamingScan)
+                                .frame(maxWidth: .infinity)
+
+                            Button(action: finishRenamingScan) {
+                                Image(systemName: "checkmark")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(scanName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .help("Save scan name")
+                            .accessibilityLabel("Save scan name")
+
+                            Button(action: cancelRenamingScan) {
+                                Image(systemName: "xmark")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Cancel renaming")
+                            .accessibilityLabel("Cancel renaming")
+                        } else {
+                            FullWidthScanPicker(
+                                scanSets: scanSets,
+                                activeScanID: $activeScanID,
+                                isEnabled: !isScanning,
+                                onNewScan: beginCreatingScan
+                            )
+                            .frame(maxWidth: .infinity)
+                            .layoutPriority(1)
+                            .help("Choose which scan set to record into and display. Floor plans and calibration are shared by every scan.")
+
+                            Button(action: beginCreatingScan) {
+                                Image(systemName: "plus")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(isScanning)
+                            .help("New scan")
+                            .accessibilityLabel("New scan")
+
+                            Button(action: beginRenamingScan) {
+                                Image(systemName: "pencil")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(activeScan == nil || isScanning)
+                            .help("Rename scan")
+                            .accessibilityLabel("Rename scan")
+
+                            Button(role: .destructive, action: beginDeletingScan) {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(activeScan == nil || isScanning)
+                            .help("Delete scan")
+                            .accessibilityLabel("Delete scan")
+                        }
+                    }
+                }
+
                 LabeledContent("Status") {
                     HStack(spacing: 6) {
                         Image(systemName: isScanning
@@ -45,147 +162,236 @@ struct InspectorView: View {
                             .foregroundStyle(isScanning ? .primary : .secondary)
                     }
                 }
-                .help("The scanner stays idle until you tap the calibrated floor plan. Each tap stores the complete result of one successful CoreWLAN scan; sidebar selections only change what is displayed.")
+                .help("The app scans once at startup. Use Refresh or tap the calibrated floor plan to scan again. Required SSIDs and BSSIDs define when a point-capture scan is complete; Record Bands choose which available readings are saved. The header above the map controls what is displayed.")
 
-                Picker("Band", selection: $activeBand) {
-                    ForEach(WiFiBand.allCases, id: \.self) { band in
-                        Text(band.displayName).tag(band)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .help("Choose which recorded WiFi band to display on the floor plan and heatmap.")
-
-                LabeledContent("Track Bands") {
+                LabeledContent("Record Bands") {
                     VStack(alignment: .leading, spacing: 3) {
                         ForEach(WiFiBand.allCases, id: \.self) { band in
-                            Toggle(band.displayName, isOn: trackedBandBinding(band))
-                                .toggleStyle(.checkbox)
-                                .disabled(trackedBands == [band])
+                            HStack(spacing: 5) {
+                                Toggle(band.displayName, isOn: trackedBandBinding(band))
+                                    .toggleStyle(.checkbox)
+                                    .disabled(
+                                        isScanning
+                                            || trackedBands == [band]
+                                            || requiredRecordBands.contains(band)
+                                    )
+                                    .accessibilityHint(recordBandHelp(for: band))
+
+                                Spacer(minLength: 4)
+
+                                if requiredRecordBands.contains(band) {
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .accessibilityLabel("Required by a selected BSSID")
+                                }
+
+                                Text(discoveredBands.contains(band) ? "Detected" : "Not observed")
+                                    .font(.caption2)
+                                    .foregroundStyle(discoveredBands.contains(band) ? .green : .secondary)
+                                    .accessibilityLabel(discoveredBands.contains(band)
+                                                        ? "Detected in the latest scan"
+                                                        : "Not observed in the latest scan")
+                            }
+                            .help(recordBandHelp(for: band))
                         }
                     }
                 }
-                .disabled(isScanning)
-                .help("Choose which bands future points must contain and record. At least one band must remain enabled; existing points are unchanged.")
+                .help("Choose which bands to save when readings are available. A band does not have to be observed for a scan to succeed. At least one band remains enabled; existing points are unchanged.")
 
-                LabeledContent("Networks") {
+                LabeledContent("Required SSIDs") {
                     MultiSelectionMenu(
-                        allLabel: "All Networks",
+                        emptySelectionLabel: "Select SSID(s)...",
+                        showsClearSelectionOption: false,
                         options: availableSSIDs,
-                        selection: $selectedSSIDs
+                        selection: $requiredSSIDs,
+                        onPresentationChanged: onRequiredSSIDMenuPresentationChanged
                     )
                 }
                 .disabled(isScanning)
-                .help("Select one or more required networks. The heatmap shows any selected network, and captures retry until every selected network appears on every tracked band. All requires only band coverage.")
-            }
+                .help("Every selected SSID must appear on at least one selected Record Band before a scan is accepted. It does not need to appear on every band. Leave the selection empty to accept any network on a selected Record Band.")
+                .onboardingTooltip(
+                    tip: .requiredSSIDs,
+                    isPresented: activeOnboardingTip == .requiredSSIDs,
+                    onDismiss: { onDismissOnboardingTip(.requiredSSIDs) }
+                )
 
-            Section("Filter") {
-                LabeledContent("Access Points") {
-                    MultiSelectionMenu(
-                        allLabel: "All APs",
-                        options: availableBSSIDs,
-                        selection: $selectedBSSIDs
+                LabeledContent("Required BSSIDs") {
+                    GroupedBSSIDSelectionMenu(
+                        allLabel: "No required BSSIDs",
+                        groups: availableBSSIDGroups,
+                        showsBand: true,
+                        selection: $requiredBSSIDs,
+                        onPresentationChanged: onRequiredBSSIDMenuPresentationChanged
                     )
                 }
                 .disabled(isScanning)
-                .help("Select one or more required access points. A capture retries until every selected BSSID appears on one of the tracked bands; a BSSID is not required on every band.")
-            }
+                .help("Every selected BSSID must appear before a scan is accepted. Selecting a BSSID automatically enables and locks its known Record Band. An empty selection means no BSSID is required; all returned readings on selected Record Bands are still recorded.")
+                .onboardingTooltip(
+                    tip: .requiredBSSIDs,
+                    isPresented: activeOnboardingTip == .requiredBSSIDs,
+                    onDismiss: { onDismissOnboardingTip(.requiredBSSIDs) }
+                )
 
-            Section("Heatmap") {
-                Toggle("Show Heatmap", isOn: $showHeatmap)
-                    .help("Overlay a color-coded signal map on the floor plan. Log at least a few readings first, and calibrate the scale so distances are accurate.")
-
-                Toggle("Show Contours", isOn: $showContours)
-                    .disabled(metric == .channel)
-                    .help("Overlay labeled signal contours at 10 dB intervals. Crowded lines are automatically suppressed using the calibrated physical scale. Contours are unavailable for the Channel metric.")
-
-                if showContours {
-                    LabeledContent("Smoothing") {
-                        HStack(spacing: 6) {
-                            Slider(value: $contourSmoothingMeters, in: 0...3, step: 0.25)
-                            Text(contourSmoothingMeters == 0
-                                 ? "Off"
-                                 : "\(contourSmoothingMeters, specifier: "%.2g") m")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 42, alignment: .trailing)
-                                .monospacedDigit()
-                        }
-                    }
-                    .disabled(metric == .channel)
-                    .help("Smooth the calculated signal field before drawing contours. Higher values reduce point-scale bumps; zero preserves the raw interpolated field. Recorded readings and the heatmap are unchanged.")
-                }
-            }
-
-            Section {
-                Picker("Metric", selection: $metric) {
-                    ForEach(HeatmapMetric.allCases, id: \.self) { m in
-                        Text(m.displayName).tag(m)
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(ScanRequirementSummary.lines(
+                        requiredSSIDCount: requiredSSIDs.count,
+                        requiredBSSIDCount: requiredBSSIDs.count,
+                        recordBands: trackedBands
+                    ), id: \.self) { line in
+                        Text(line)
                     }
                 }
-                .help("RSSI: raw received signal strength in dBm \u{2014} higher (less negative) is stronger. SNR: signal-to-noise ratio in dB \u{2014} measures connection quality independent of raw power. Channel: shows which WiFi channel dominates each area, useful for spotting interference between overlapping networks.")
-
-                Picker("Color Scheme", selection: $colorScheme) {
-                    ForEach(HeatmapColorScheme.allCases, id: \.self) { scheme in
-                        Text(scheme.displayName).tag(scheme)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } header: {
+                HStack {
+                    Text("Scanning")
+                    Spacer()
+                    Button(action: onRefreshNetworks) {
+                        Image(systemName: "arrow.clockwise")
                     }
+                    .buttonStyle(.borderless)
+                    .disabled(isScanning)
+                    .help("Refresh WiFi networks")
+                    .accessibilityLabel("Refresh WiFi networks")
                 }
-                .help("Red \u{2192} Blue: red is weak and blue is strong. Red \u{2192} Green: traffic-light convention, weak to strong. Colorblind Safe: blue and orange palette, readable for deuteranopia and protanopia.")
-
-                if metric != .channel {
-                    HeatmapRangeControl(
-                        range: metric == .rssi ? $rssiRange : $snrRange,
-                        metric: metric
-                    )
-                }
-
-                LabeledContent("Fade Radius") {
-                    HStack(spacing: 6) {
-                        Slider(value: $outerRadius, in: IDWInterpolator.innerRadiusMeters...30, step: 0.5)
-                        Text("\(outerRadius, specifier: "%.0f") m")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 34, alignment: .trailing)
-                            .monospacedDigit()
-                    }
-                }
-                .help("How far each reading\u{2019}s signal influence extends in real-world meters. Smaller values produce sharper, more localized blobs; larger values smooth the heatmap across bigger gaps between readings.")
-            }
-            .disabled(!showHeatmap && !showContours)
-
-            if showHeatmap || showContours {
-                Section("Legend") {
-                    HeatmapLegendView(
-                        colorScheme: colorScheme,
-                        metric: metric,
-                        valueRange: metric == .rssi ? rssiRange : snrRange
-                    )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                .frame(maxWidth: .infinity)
             }
 
             Section("Survey") {
-                Toggle("Calibration Mode", isOn: $isCalibrating)
-                    .help("Set the real-world scale by tapping two points of known distance on the floor plan. Required before logging readings \u{2014} without calibration the fade radius and distance calculations will be inaccurate.")
-
                 Toggle("Delete Mode", isOn: $isDeleteMode)
                     .tint(isDeleteMode ? .red : nil)
                     .help("Click any reading marker on the map to remove it. Right-click a marker at any time to get a context menu with a delete option.")
 
-                Button(role: .destructive, action: onClearAll) {
+                Button(role: .destructive) {
+                    isConfirmingClearAll = true
+                } label: {
                     Label("Clear All", systemImage: "trash")
                 }
                 .disabled(!hasRecordedPoints || isScanning)
                 .help("Delete every recorded point on the currently active floor. Use Undo to restore them.")
             }
-
-            Section("Floor Plan") {
-                Button("Import Floor Plan\u{2026}", action: onImport)
-                    .help("Load a floor plan image (PNG, JPEG, or PDF) as the background for this floor. The image is stored inside the survey document.")
-                Button("Export as PNG\u{2026}", action: onExport)
-                    .help("Save the floor plan with the heatmap composited on top as a PNG image. If the heatmap is hidden, only the floor plan is exported.")
-            }
         }
         .formStyle(.grouped)
+        .alert("New Scan", isPresented: $isCreatingScan) {
+            TextField("Scan name", text: $newScanName)
+            Button("Cancel", role: .cancel) {
+                cancelCreatingScan()
+            }
+            Button("OK") {
+                finishCreatingScan()
+            }
+                .disabled(newScanName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.defaultAction)
+        } message: {
+            Text("Enter a name for the new scan.")
+        }
+        .alert(
+            ScanDialogCopy.deleteTitle(scanName: scanPendingDeletion?.name ?? "this scan"),
+            isPresented: $isConfirmingDeleteScan
+        ) {
+            Button("Cancel", role: .cancel) {
+                scanPendingDeletion = nil
+                isConfirmingDeleteScan = false
+            }
+            Button("Delete Scan", role: .destructive) {
+                finishDeletingScan()
+            }
+        } message: {
+            Text(ScanDialogCopy.deleteMessage(
+                scanName: scanPendingDeletion?.name ?? "this scan"
+            ))
+        }
+        .confirmationDialog(
+            "Clear all points on this floor?",
+            isPresented: $isConfirmingClearAll,
+            titleVisibility: .visible
+        ) {
+            Button("Clear All Points", role: .destructive, action: onClearAll)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes every recorded point from the active scan on this floor. You can restore them with Undo.")
+        }
+        .onAppear(perform: applyDefaultRequiredBSSIDSelectionIfNeeded)
+        .onChange(of: availableBSSIDGroups) {
+            applyDefaultRequiredBSSIDSelectionIfNeeded()
+        }
+        .onChange(of: requiredSSIDs) {
+            applyDefaultRequiredBSSIDSelectionIfNeeded()
+        }
+        .onChange(of: hasCompletedRequiredSSIDScan) {
+            applyDefaultRequiredBSSIDSelectionIfNeeded()
+        }
+    }
+
+    private func applyDefaultRequiredBSSIDSelectionIfNeeded() {
+        guard let selection = requiredBSSIDSelectionInitializer.selectionToApply(
+            defaultsToAll: defaultsRequiredBSSIDsToAll,
+            hasRequiredSSIDs: !requiredSSIDs.isEmpty,
+            hasCompletedRequiredSSIDScan: hasCompletedRequiredSSIDScan,
+            groups: availableBSSIDGroups,
+            currentSelection: requiredBSSIDs,
+            recordBands: trackedBands
+        ) else { return }
+        onDefaultRequiredBSSIDsApplied(selection)
+        requiredBSSIDs = selection
+    }
+
+    private func beginCreatingScan() {
+        guard !isScanning else { return }
+        newScanName = ""
+        isCreatingScan = true
+    }
+
+    private func finishCreatingScan() {
+        let trimmedName = newScanName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        onNewScan(trimmedName)
+        newScanName = ""
+        isCreatingScan = false
+    }
+
+    private func cancelCreatingScan() {
+        newScanName = ""
+        isCreatingScan = false
+    }
+
+    private func beginRenamingScan() {
+        guard let activeScan else { return }
+        scanName = activeScan.name
+        isRenamingScan = true
+        Task { @MainActor in
+            await Task.yield()
+            isScanNameFocused = true
+        }
+    }
+
+    private func finishRenamingScan() {
+        let trimmedName = scanName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        onRenameScan(trimmedName)
+        scanName = trimmedName
+        isScanNameFocused = false
+        isRenamingScan = false
+    }
+
+    private func cancelRenamingScan() {
+        isScanNameFocused = false
+        isRenamingScan = false
+    }
+
+    private func beginDeletingScan() {
+        guard !isScanning, let activeScan else { return }
+        scanPendingDeletion = activeScan
+        isConfirmingDeleteScan = true
+    }
+
+    private func finishDeletingScan() {
+        guard let scanID = scanPendingDeletion?.id else { return }
+        onDeleteScan(scanID)
+        scanPendingDeletion = nil
+        isConfirmingDeleteScan = false
     }
 
     private func trackedBandBinding(_ band: WiFiBand) -> Binding<Bool> {
@@ -194,42 +400,233 @@ struct InspectorView: View {
             set: { enabled in
                 if enabled {
                     trackedBands.insert(band)
-                } else if trackedBands.count > 1 {
+                } else if trackedBands.count > 1 && !requiredRecordBands.contains(band) {
                     trackedBands.remove(band)
                 }
             }
         )
     }
+
+    private func recordBandHelp(for band: WiFiBand) -> String {
+        if requiredRecordBands.contains(band) {
+            return "Required by a selected BSSID. Deselect that BSSID before turning off \(band.displayName) recording."
+        }
+        let discovery = discoveredBands.contains(band)
+            ? "Detected in the latest scan."
+            : "Not observed in the latest scan."
+        return "\(discovery) Readings on \(band.displayName) are recorded when available, but their absence does not prevent a capture."
+    }
 }
 
-private struct MultiSelectionMenu: View {
-    let allLabel: String
+enum ScanDialogCopy {
+    static func deleteTitle(scanName: String) -> String {
+        "Delete “\(scanName)”?"
+    }
+
+    static func deleteMessage(scanName: String) -> String {
+        "Are you sure you want to delete “\(scanName)” and all of its recorded points? This cannot be undone."
+    }
+}
+
+enum ScanPickerAction: Equatable {
+    case select(UUID)
+    case newScan
+}
+
+enum ScanPickerLayout {
+    private static let expandingPriority = NSLayoutConstraint.Priority(rawValue: 1)
+    private static let newScanIdentifier = NSUserInterfaceItemIdentifier("WifiHeatmap.NewScan")
+
+    static func configure(_ popup: NSPopUpButton) {
+        popup.setContentHuggingPriority(expandingPriority, for: .horizontal)
+        popup.setContentCompressionResistancePriority(expandingPriority, for: .horizontal)
+    }
+
+    static func populate(
+        _ popup: NSPopUpButton,
+        scanSets: [ScanSet],
+        activeScanID: UUID?
+    ) {
+        popup.removeAllItems()
+
+        if scanSets.isEmpty {
+            let emptyItem = NSMenuItem(title: "No scans yet", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            popup.menu?.addItem(emptyItem)
+        } else {
+            for scan in scanSets {
+                let item = NSMenuItem(title: scan.name, action: nil, keyEquivalent: "")
+                item.representedObject = scan.id.uuidString
+                popup.menu?.addItem(item)
+            }
+        }
+
+        popup.menu?.addItem(.separator())
+        let newScanItem = NSMenuItem(title: "New Scan", action: nil, keyEquivalent: "")
+        newScanItem.identifier = newScanIdentifier
+        popup.menu?.addItem(newScanItem)
+
+        selectActiveItem(in: popup, scanSets: scanSets, activeScanID: activeScanID)
+    }
+
+    static func action(for item: NSMenuItem?) -> ScanPickerAction? {
+        guard let item else { return nil }
+        if item.identifier == newScanIdentifier {
+            return .newScan
+        }
+        guard let rawID = item.representedObject as? String,
+              let scanID = UUID(uuidString: rawID)
+        else { return nil }
+        return .select(scanID)
+    }
+
+    static func selectActiveItem(
+        in popup: NSPopUpButton,
+        scanSets: [ScanSet],
+        activeScanID: UUID?
+    ) {
+        if let activeScanID,
+           let selectedIndex = scanSets.firstIndex(where: { $0.id == activeScanID }) {
+            popup.selectItem(at: selectedIndex)
+        } else if scanSets.isEmpty {
+            popup.selectItem(at: 0)
+        } else {
+            popup.select(nil)
+        }
+    }
+}
+
+struct FullWidthScanPicker: NSViewRepresentable {
+    let scanSets: [ScanSet]
+    @Binding var activeScanID: UUID?
+    let isEnabled: Bool
+    let onNewScan: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        ScanPickerLayout.configure(popup)
+        popup.target = context.coordinator
+        popup.action = #selector(Coordinator.selectionChanged(_:))
+        popup.setAccessibilityLabel("Scan")
+        return popup
+    }
+
+    func updateNSView(_ popup: NSPopUpButton, context: Context) {
+        context.coordinator.parent = self
+        ScanPickerLayout.populate(
+            popup,
+            scanSets: scanSets,
+            activeScanID: activeScanID
+        )
+        popup.isEnabled = isEnabled
+    }
+
+    final class Coordinator: NSObject {
+        var parent: FullWidthScanPicker
+
+        init(parent: FullWidthScanPicker) {
+            self.parent = parent
+        }
+
+        @objc func selectionChanged(_ sender: NSPopUpButton) {
+            switch ScanPickerLayout.action(for: sender.selectedItem) {
+            case .select(let scanID):
+                parent.activeScanID = scanID
+            case .newScan:
+                ScanPickerLayout.selectActiveItem(
+                    in: sender,
+                    scanSets: parent.scanSets,
+                    activeScanID: parent.activeScanID
+                )
+                parent.onNewScan()
+            case nil:
+                break
+            }
+        }
+    }
+}
+
+struct MultiSelectionMenu: View {
+    let emptySelectionLabel: String
+    let showsClearSelectionOption: Bool
     let options: [String]
     @Binding var selection: Set<String>
+    let onPresentationChanged: (Bool) -> Void
+    @State private var isPresented = false
 
     private var summary: String {
-        if selection.isEmpty { return allLabel }
+        if selection.isEmpty { return emptySelectionLabel }
         if selection.count == 1 { return selection.first! }
         return "\(selection.count) selected"
     }
 
     var body: some View {
-        Menu(summary) {
-            Button {
-                selection.removeAll()
-            } label: {
-                if selection.isEmpty {
-                    Label(allLabel, systemImage: "checkmark")
-                } else {
-                    Text(allLabel)
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Text(summary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel(emptySelectionLabel)
+        .accessibilityValue(summary)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 0) {
+                if showsClearSelectionOption {
+                    Button {
+                        selection.removeAll()
+                    } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: "checkmark")
+                                .opacity(selection.isEmpty ? 1 : 0)
+                                .frame(width: 12)
+                            Text("Clear Selection")
+                            Spacer(minLength: 12)
+                        }
+                        .contentShape(Rectangle())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider()
+                        .padding(.vertical, 4)
                 }
-            }
 
-            Divider()
-
-            ForEach(options, id: \.self) { option in
-                Toggle(option, isOn: optionBinding(option))
+                ScrollView {
+                    if options.isEmpty {
+                        Text("No networks found")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 4)
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 4) {
+                            ForEach(options, id: \.self) { option in
+                                Toggle(option, isOn: optionBinding(option))
+                                    .toggleStyle(.checkbox)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 6)
+                .frame(height: min(max(CGFloat(options.count) * 24, 28), 280))
             }
+            .padding(6)
+            .frame(minWidth: 220, idealWidth: 250)
+        }
+        .onChange(of: isPresented) {
+            onPresentationChanged(isPresented)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
@@ -245,9 +642,122 @@ private struct MultiSelectionMenu: View {
     }
 }
 
-private struct HeatmapRangeControl: View {
+struct GroupedBSSIDSelectionMenu: View {
+    let allLabel: String
+    let groups: [BSSIDOptionGroup]
+    let showsBand: Bool
+    @Binding var selection: Set<String>
+    let onPresentationChanged: (Bool) -> Void
+    @State private var isPresented = false
+
+    private var optionCount: Int {
+        groups.reduce(0) { $0 + $1.options.count }
+    }
+
+    private var summary: String {
+        if selection.isEmpty { return allLabel }
+        if selection.count == 1 { return selection.first! }
+        return "\(selection.count) selected"
+    }
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Text(summary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel(allLabel)
+        .accessibilityValue(summary)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    selection.removeAll()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "checkmark")
+                            .opacity(selection.isEmpty ? 1 : 0)
+                            .frame(width: 12)
+                        Text(allLabel)
+                        Spacer(minLength: 12)
+                    }
+                    .contentShape(Rectangle())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(groups) { group in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(group.ssid)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.leading, 19)
+
+                                ForEach(group.options) { option in
+                                    Toggle(
+                                        showsBand
+                                            ? "\(option.bssid) (\(option.bandLabel))"
+                                            : option.bssid,
+                                        isOn: optionBinding(option.bssid)
+                                    )
+                                    .toggleStyle(.checkbox)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 6)
+                }
+                .frame(height: min(
+                    max(CGFloat(optionCount) * 24 + CGFloat(groups.count) * 18, 46),
+                    320
+                ))
+            }
+            .padding(6)
+            .frame(minWidth: showsBand ? 280 : 240, idealWidth: showsBand ? 320 : 280)
+        }
+        .onChange(of: isPresented) {
+            onPresentationChanged(isPresented)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    private func optionBinding(_ bssid: String) -> Binding<Bool> {
+        Binding(
+            get: { selection.contains(bssid) },
+            set: { selected in
+                if selected { selection.insert(bssid) }
+                else { selection.remove(bssid) }
+            }
+        )
+    }
+}
+
+enum HeatmapRangeField: Hashable {
+    case minimum
+    case maximum
+}
+
+enum HeatmapRangeFocusPolicy {
+    static let initialField: HeatmapRangeField? = nil
+}
+
+struct HeatmapRangeControl: View {
     @Binding var range: HeatmapValueRange
     let metric: HeatmapMetric
+    @FocusState private var focusedField: HeatmapRangeField?
 
     private var limits: ClosedRange<Double> {
         metric == .rssi ? -120...0 : -20...100
@@ -263,23 +773,23 @@ private struct HeatmapRangeControl: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            TwoSidedSlider(range: $range, limits: limits)
-                .frame(height: 22)
-
             HStack(spacing: 6) {
                 TextField("Minimum", value: lowerBinding, format: .number.precision(.fractionLength(0...1)))
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 62)
                     .multilineTextAlignment(.trailing)
+                    .focused($focusedField, equals: .minimum)
                     .accessibilityLabel("Minimum \(metric.displayName)")
 
-                Text("to")
-                    .foregroundStyle(.secondary)
+                TwoSidedSlider(range: $range, limits: limits)
+                    .frame(minWidth: 90)
+                    .frame(height: 22)
 
                 TextField("Maximum", value: upperBinding, format: .number.precision(.fractionLength(0...1)))
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 62)
                     .multilineTextAlignment(.trailing)
+                    .focused($focusedField, equals: .maximum)
                     .accessibilityLabel("Maximum \(metric.displayName)")
 
                 Text(unit)
@@ -288,6 +798,11 @@ private struct HeatmapRangeControl: View {
             .font(.caption)
         }
         .help("Values at or below the minimum use the weakest color; values at or above the maximum use the strongest color.")
+        .onAppear {
+            DispatchQueue.main.async {
+                focusedField = HeatmapRangeFocusPolicy.initialField
+            }
+        }
     }
 
     private var lowerBinding: Binding<Double> {

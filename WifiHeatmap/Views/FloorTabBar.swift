@@ -5,6 +5,8 @@ struct FloorTabBar: View {
     @Binding var selectedFloorID: UUID?
     @Binding var showInspector: Bool
 
+    @State private var floorPendingDeletion: Floor?
+
     var body: some View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -14,7 +16,7 @@ struct FloorTabBar: View {
                             floor: $floor,
                             isSelected: floor.id == selectedFloorID,
                             onSelect: { selectedFloorID = floor.id },
-                            onDelete: { deleteFloor(id: floor.id) }
+                            onDelete: { floorPendingDeletion = floor }
                         )
                         Divider().frame(maxHeight: 20)
                     }
@@ -52,10 +54,28 @@ struct FloorTabBar: View {
         .frame(height: 36)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
+        .confirmationDialog(
+            "Delete Floor?",
+            isPresented: Binding(
+                get: { floorPendingDeletion != nil },
+                set: { if !$0 { floorPendingDeletion = nil } }
+            ),
+            presenting: floorPendingDeletion
+        ) { floor in
+            Button("Delete Floor", role: .destructive) {
+                deleteFloor(id: floor.id)
+                floorPendingDeletion = nil
+            }
+            Button("Cancel", role: .cancel) {
+                floorPendingDeletion = nil
+            }
+        } message: { floor in
+            Text("Delete \u{201c}\(floor.name)\u{201d} and all of its recorded survey data? This cannot be undone.")
+        }
     }
 
     private func deleteFloor(id: UUID) {
-        document.survey.floors.removeAll { $0.id == id }
+        document.removeFloor(id: id)
         if selectedFloorID == id {
             selectedFloorID = document.survey.floors.first?.id
         }
@@ -90,12 +110,14 @@ struct FloorTabItem: View {
             if isSelected && !isEditing {
                 Button(action: onDelete) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .frame(width: 14, height: 14)
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .help("Remove floor")
+                .accessibilityLabel("Delete \(floor.name)")
             }
         }
         .padding(.horizontal, 10)
