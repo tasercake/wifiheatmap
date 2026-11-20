@@ -1,0 +1,79 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    name: Lint, types, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run typecheck
+      - run: npm run test
+
+  e2e:
+    name: End-to-end (Playwright, mock mode)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e:build
+      - run: npm run e2e
+        env:
+          CI: "1"
+      # Only `next dev` refuses pages opened by IP address (#140)
+      - run: npx playwright test e2e/open-by-address.spec.ts
+        env:
+          CI: "1"
+          E2E_SERVER: dev
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  desktop-server:
+    name: Desktop app server bundle (smoke test, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows: the bundle ships node.exe from the official .zip, and
+        # netsh/cmd paths differ; see also the installed-app test in release.yml
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      # The Node binary the bundle ships (desktop/.cache), so a slow
+      # nodejs.org doesn't hold up every run. The key changes with the
+      # version pinned in build-server.mjs.
+      - uses: actions/cache@v6
+        with:
+          path: desktop/.cache
+          key: node-dist-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('desktop/build-server.mjs') }}
+          # An older entry may hold the same Node version; build-server.mjs
+          # only downloads when the pinned one is missing.
+          restore-keys: node-dist-${{ runner.os }}-${{ runner.arch }}-
+      # Next standalone build + the pinned Node binary, as the app ships them
+      - run: npm run desktop:server
+      # Starts the bundle read-only with a temp data dir in mock mode and
+      # checks pages, APIs, seeded floor plans, a write, and exit on stdin close
+      - run: npm run desktop:smoke

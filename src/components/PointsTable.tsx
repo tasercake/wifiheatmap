@@ -1,0 +1,653 @@
+"use client";
+import React, { useState } from "react";
+import {
+  useTable,
+  tableFeatures,
+  columnFilteringFeature,
+  globalFilteringFeature,
+  columnVisibilityFeature,
+  rowPaginationFeature,
+  rowSelectionFeature,
+  rowSortingFeature,
+  createFilteredRowModel,
+  createPaginatedRowModel,
+  createSortedRowModel,
+  filterFn_includesString,
+  sortFn_alphanumeric,
+  sortFn_datetime,
+  sortFn_text,
+  metaHelper,
+  ColumnDef,
+  flexRender,
+  ColumnVisibilityState,
+  RowSelectionState,
+  SortingState,
+} from "@tanstack/react-table";
+import {
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
+  Columns3,
+  Download,
+  Trash2,
+} from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ApMapping,
+  Gradient,
+  IperfTestProperty,
+  SurveyPoint,
+  SurveyPointActions,
+} from "@/lib/types";
+import { getColorAt, objectToRGBAString } from "@/lib/utils-gradient";
+import {
+  formatMacAddress,
+  rssiToPercentage,
+  snrOf,
+  validNoise,
+} from "@/lib/utils";
+import { apHues, apKeyFor, apNameFor } from "@/lib/apName";
+import { ApChip } from "./ApChip";
+import { hasSpeedData } from "@/lib/measurement-mode";
+import { surveyPointsToCsv, downloadText } from "@/lib/exportCsv";
+import { ExportSurveyButton } from "./ExportSurveyButton";
+import { AlertDialogModal } from "./AlertDialogModal";
+import { PointLabel } from "./PointLabel";
+import { useSettings } from "./GlobalSettings";
+import { cn } from "@/lib/utils";
+
+// TanStack Table v9 only includes the features a table registers. These are
+// the ones v8 bundled and this table uses, with the built-in functions the
+// "auto" filter and sort pick for its column types.
+const features = tableFeatures({
+  columnFilteringFeature,
+  globalFilteringFeature,
+  columnVisibilityFeature,
+  rowSortingFeature,
+  rowSelectionFeature,
+  rowPaginationFeature,
+  filteredRowModel: createFilteredRowModel(),
+  sortedRowModel: createSortedRowModel(),
+  paginatedRowModel: createPaginatedRowModel(),
+  filterFns: { includesString: filterFn_includesString },
+  sortFns: {
+    alphanumeric: sortFn_alphanumeric,
+    datetime: sortFn_datetime,
+    text: sortFn_text,
+  },
+  columnMeta: metaHelper<{ align?: "left" }>(),
+});
+
+type Row = {
+  id: string;
+  label: string; // the name, or the id when the point has none
+  x: number;
+  y: number;
+  ssid: string;
+  bssid: string;
+  accessPoint: string;
+  rssi: number;
+  noise: number | null;
+  snr: number | null;
+  signalQuality: number;
+  channel: number;
+  security: string;
+  txRate: number;
+  phyMode: string;
+  channelWidth: number;
+  band: string;
+  // null: that test did not run (0 is a measured 0 Mbps)
+  tcpDownloadMbps: number | null;
+  tcpUploadMbps: number | null;
+  udpDownloadMbps: number | null;
+  udpUploadMbps: number | null;
+  timestamp: number;
+  isEnabled: boolean;
+  origPoint: SurveyPoint;
+};
+
+interface SurveyPointsTableProps {
+  data: SurveyPoint[];
+  surveyPointActions: SurveyPointActions;
+  apMapping: ApMapping[];
+}
+
+const toMbps = (test: IperfTestProperty | null) =>
+  test ? Math.round((test.bitsPerSecond / 1_000_000) * 100) / 100 : null;
+const mbps = (v: number | null) => (v === null ? "—" : v.toFixed(2));
+
+const SPEED_COLUMNS = new Set([
+  "tcpDownloadMbps",
+  "tcpUploadMbps",
+  "udpDownloadMbps",
+  "udpUploadMbps",
+]);
+
+const SurveyPointsTable: React.FC<SurveyPointsTableProps> = ({
+  data,
+  surveyPointActions,
+  apMapping,
+}) => {
+  const { settings } = useSettings();
+  // Speed columns would be empty: leave them out until a point has speed
+  const hasSpeed = data.some(hasSpeedData);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnVisibility, setColumnVisibility] =
+    useState<ColumnVisibilityState>({
+      // the point's id: the Name column shows it until a point is named
+      id: false,
+      rssi: false,
+      noise: false,
+      snr: false,
+      ssid: false,
+      security: false,
+      txRate: false,
+      phyMode: false,
+      channelWidth: false,
+      channel: false,
+      x: false,
+      y: false,
+      udpDownloadMbps: false,
+      udpUploadMbps: false,
+    });
+
+  const hues = apHues(
+    data.map((p) => p.wifiData.bssid),
+    apMapping,
+  );
+
+  const rows: Row[] = data.map((point) => ({
+    origPoint: point,
+    id: point.id,
+    // sorts and filters by what the Name column shows
+    label: point.label || point.id,
+    x: point.x,
+    y: point.y,
+    ssid: point.wifiData.ssid,
+    bssid: point.wifiData.bssid,
+    accessPoint: apNameFor(point.wifiData.bssid, apMapping) ?? "",
+    rssi: point.wifiData.rssi,
+    noise: validNoise(point.wifiData.noise),
+    snr: snrOf(point.wifiData),
+    signalQuality:
+      point.wifiData.signalStrength || rssiToPercentage(point.wifiData.rssi),
+    channel: point.wifiData.channel,
+    security: point.wifiData.security,
+    txRate: point.wifiData.txRate,
+    phyMode: point.wifiData.phyMode,
+    channelWidth: point.wifiData.channelWidth,
+    band: point.wifiData.band ? `${point.wifiData.band} GHz` : "",
+    tcpDownloadMbps: toMbps(point.iperfData.tcpDownload),
+    tcpUploadMbps: toMbps(point.iperfData.tcpUpload),
+    udpDownloadMbps: toMbps(point.iperfData.udpDownload),
+    udpUploadMbps: toMbps(point.iperfData.udpUpload),
+    timestamp: point.timestamp,
+    isEnabled: point.isEnabled,
+  }));
+
+  const update = surveyPointActions.update;
+  const allColumns: ColumnDef<typeof features, Row>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            // v9: "some" includes "all", hence the second check
+            (table.getIsSomePageRowsSelected() &&
+              !table.getIsAllPageRowsSelected() &&
+              "indeterminate")
+          }
+          onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+          aria-label="Select all rows on this page"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(v) => row.toggleSelected(!!v)}
+          aria-label={`Select ${row.original.id}`}
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+    { accessorKey: "id", header: "Point", meta: { align: "left" } },
+    {
+      accessorKey: "label",
+      header: "Name",
+      meta: { align: "left" },
+      cell: ({ row }) => (
+        <PointLabel
+          point={row.original.origPoint}
+          onSave={(label) => update(row.original.origPoint, { label })}
+          className="max-w-48"
+        />
+      ),
+    },
+    {
+      id: "enabled",
+      accessorKey: "isEnabled",
+      header: "Used",
+      cell: ({ row }) => (
+        <Switch
+          checked={row.original.isEnabled}
+          onCheckedChange={(v) =>
+            update(row.original.origPoint, { isEnabled: v })
+          }
+          aria-label={`Use ${row.original.id} in heat maps`}
+        />
+      ),
+    },
+    {
+      accessorKey: "signalQuality",
+      header: "Signal %",
+      cell: ({ row, getValue }) => (
+        <span className="inline-flex items-center gap-2">
+          <span
+            className="h-2.5 w-2.5 rounded-full border border-black/15"
+            style={{
+              background: signalColor(getValue<number>(), settings.gradient),
+            }}
+          />
+          {getValue<number>()}
+          {!row.original.isEnabled && (
+            <span className="sr-only"> (ignored)</span>
+          )}
+        </span>
+      ),
+    },
+    { accessorKey: "rssi", header: "Signal dBm" },
+    {
+      accessorKey: "noise",
+      header: "Noise dBm",
+      cell: ({ getValue }) => getValue<number | null>() ?? "—",
+    },
+    {
+      accessorKey: "snr",
+      header: "SNR dB",
+      cell: ({ getValue }) => getValue<number | null>() ?? "—",
+    },
+    { accessorKey: "band", header: "Band" },
+    {
+      accessorKey: "channel",
+      header: "Channel",
+      cell: ({ getValue }) => getValue<number>() || "—", // 0: not reported
+    },
+    {
+      accessorKey: "accessPoint",
+      header: "Access point",
+      meta: { align: "left" },
+      cell: ({ row }) => {
+        const { accessPoint, bssid } = row.original;
+        if (!accessPoint && !bssid) return "";
+        return (
+          <ApChip
+            hue={hues.get(apKeyFor(bssid, apMapping))}
+            mono={!accessPoint}
+          >
+            {accessPoint || formatMacAddress(bssid)}
+          </ApChip>
+        );
+      },
+    },
+    { accessorKey: "ssid", header: "Network", meta: { align: "left" } },
+    {
+      accessorKey: "tcpDownloadMbps",
+      header: "Download Mbps",
+      cell: ({ getValue }) => mbps(getValue<number | null>()),
+    },
+    {
+      accessorKey: "tcpUploadMbps",
+      header: "Upload Mbps",
+      cell: ({ getValue }) => mbps(getValue<number | null>()),
+    },
+    {
+      accessorKey: "udpDownloadMbps",
+      header: "UDP download Mbps",
+      cell: ({ getValue }) => mbps(getValue<number | null>()),
+    },
+    {
+      accessorKey: "udpUploadMbps",
+      header: "UDP upload Mbps",
+      cell: ({ getValue }) => mbps(getValue<number | null>()),
+    },
+    { accessorKey: "security", header: "Security", meta: { align: "left" } },
+    {
+      accessorKey: "txRate",
+      header: "TX rate",
+      cell: ({ getValue }) => getValue<number>() || "—", // 0: not reported
+    },
+    { accessorKey: "phyMode", header: "Wi-Fi standard" },
+    {
+      accessorKey: "channelWidth",
+      header: "Width MHz",
+      cell: ({ getValue }) => getValue<number>() || "—", // 0: not reported
+    },
+    { accessorKey: "x", header: "X" },
+    { accessorKey: "y", header: "Y" },
+    {
+      accessorKey: "timestamp",
+      header: "Measured",
+      cell: ({ getValue }) => new Date(getValue<number>()).toLocaleString(),
+    },
+  ];
+  const columns = hasSpeed
+    ? allColumns
+    : allColumns.filter(
+        (c) =>
+          !SPEED_COLUMNS.has((c as { accessorKey?: string }).accessorKey ?? ""),
+      );
+
+  const table = useTable({
+    features,
+    data: rows,
+    columns,
+    state: { rowSelection, globalFilter, columnVisibility, sorting },
+    enableRowSelection: true,
+    // Selection is keyed by point id, not by row index
+    getRowId: (row) => row.id,
+    // v8's default: the filter box searches text and number columns only
+    getColumnCanGlobalFilter: (column) => {
+      const value = rows[0]?.[column.id as keyof Row];
+      return typeof value === "string" || typeof value === "number";
+    },
+    onRowSelectionChange: setRowSelection,
+    onColumnVisibilityChange: setColumnVisibility,
+    onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: setSorting,
+    initialState: { pagination: { pageIndex: 0, pageSize: 25 } },
+  });
+
+  const selectedPoints = rows
+    .filter((r) => rowSelection[r.id])
+    .map((r) => r.origPoint);
+
+  const deleteSelected = () => {
+    surveyPointActions.delete(selectedPoints);
+    setRowSelection({});
+  };
+
+  const setSelectedEnabled = (enabled: boolean) => {
+    for (const p of selectedPoints) update(p, { isEnabled: enabled });
+  };
+
+  const exportCsv = () => {
+    const name =
+      settings.floorplanImageName.replace(/\.[^.]+$/, "") || "survey";
+    downloadText(
+      surveyPointsToCsv(data, apMapping),
+      `${name}-survey-points.csv`,
+    );
+  };
+
+  const selectedCount = selectedPoints.length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold">Survey points</h1>
+          <p className="text-sm text-muted-foreground">
+            Every measurement in this survey. Switch a point off to leave it out
+            of the heat maps, or delete the ones that went wrong.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportCsv}
+            disabled={data.length === 0}
+            data-testid="export-csv"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </Button>
+          <ExportSurveyButton floorplan={settings.floorplanImageName} />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          placeholder="Filter points"
+          value={globalFilter ?? ""}
+          onChange={(e) => setGlobalFilter(e.target.value)}
+          className="max-w-xs"
+          aria-label="Filter points"
+        />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Columns3 className="h-3.5 w-3.5" />
+              Columns
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="max-h-[60vh] overflow-y-auto"
+          >
+            {table
+              .getAllColumns()
+              .filter((column) => column.getCanHide())
+              .map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(v) => column.toggleVisibility(!!v)}
+                >
+                  {typeof column.columnDef.header === "string"
+                    ? column.columnDef.header
+                    : column.id}
+                </DropdownMenuCheckboxItem>
+              ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {selectedCount > 0 && (
+          <div className="ml-auto flex flex-wrap items-center gap-2 rounded-md border bg-brand-soft/60 py-1 pl-3 pr-1 text-sm">
+            <span className="tabular">{selectedCount} selected</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedEnabled(true)}
+            >
+              Use
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedEnabled(false)}
+            >
+              Ignore
+            </Button>
+            <AlertDialogModal
+              title={`Delete ${selectedCount} point${selectedCount === 1 ? "" : "s"}?`}
+              description="They are removed from this survey. This cannot be undone."
+              confirmLabel="Delete"
+              destructive
+              onConfirm={deleteSelected}
+              onCancel={() => {}}
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                data-testid="delete-selected"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </Button>
+            </AlertDialogModal>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRowSelection({})}
+            >
+              Clear
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-md border bg-surface">
+        <Table data-testid="points-table">
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id} className="hover:bg-transparent">
+                {headerGroup.headers.map((header) => {
+                  const align = header.column.columnDef.meta?.align;
+                  const canSort = header.column.getCanSort();
+                  return (
+                    <TableHead
+                      key={header.id}
+                      className={cn(
+                        "h-10 whitespace-nowrap text-xs",
+                        align === "left" ? "text-left" : "text-right",
+                      )}
+                    >
+                      {header.isPlaceholder ? null : canSort ? (
+                        <button
+                          type="button"
+                          onClick={header.column.getToggleSortingHandler()}
+                          className={cn(
+                            "inline-flex items-center gap-1 hover:text-foreground",
+                            align === "left" ? "" : "flex-row-reverse",
+                          )}
+                        >
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
+                          {{
+                            asc: <ChevronUp className="h-3.5 w-3.5" />,
+                            desc: <ChevronDown className="h-3.5 w-3.5" />,
+                          }[header.column.getIsSorted() as string] ?? (
+                            <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" />
+                          )}
+                        </button>
+                      ) : (
+                        flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )
+                      )}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                  data-testid="points-row"
+                  className={cn(
+                    !row.original.isEnabled && "text-muted-foreground",
+                  )}
+                >
+                  {row.getVisibleCells().map((cell) => {
+                    const align = cell.column.columnDef.meta?.align;
+                    return (
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          "tabular whitespace-nowrap py-2",
+                          align === "left" ? "text-left" : "text-right",
+                        )}
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
+                  {data.length === 0
+                    ? "No measurements yet. Take some on the Floor plan tab."
+                    : "No points match the filter."}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {!hasSpeed && data.length > 0 && (
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="speed-columns-off"
+        >
+          {settings.measureSpeed
+            ? "Speed columns appear once a point has a speed reading. None has one yet: check the speed setup in "
+            : "This survey measures signal only, so there are no speed columns. To measure speed too, choose Signal and speed in "}
+          <a href="#settings" className="prose-link">
+            Settings
+          </a>
+          .
+        </p>
+      )}
+
+      {table.getPageCount() > 1 && (
+        <div className="flex items-center justify-end gap-2 text-sm">
+          <span className="tabular text-muted-foreground">
+            Page {table.state.pagination.pageIndex + 1} of{" "}
+            {table.getPageCount()}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage()}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => table.nextPage()}
+            disabled={!table.getCanNextPage()}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+function signalColor(percent: number, gradient: Gradient): string {
+  return objectToRGBAString({ ...getColorAt(percent / 100, gradient), a: 1 });
+}
+
+export default SurveyPointsTable;

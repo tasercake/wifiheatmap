@@ -1,0 +1,870 @@
+"use client";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import { useSettings } from "@/components/GlobalSettings";
+import { calculateRadiusByBoundingBox } from "@/lib/radiusCalculations";
+import {
+  SurveyPoint,
+  testProperties,
+  MeasurementTestType,
+  testTypes,
+  IperfTestProperty,
+  HeatmapKey,
+  HeatmapProperty,
+  HeatmapRange,
+  HeatmapScale,
+  Gradient,
+} from "@/lib/types";
+import { getColorAt, objectToRGBAString } from "@/lib/utils-gradient";
+import { cn, metricFormatter, percentageToRssi, snrOf } from "@/lib/utils";
+import { getLogger } from "@/lib/logger";
+import createHeatmapWebGLRenderer from "@/app/webGL/renderers/mainRenderer";
+
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { HeatmapSlider } from "./Slider";
+import { HeatmapScaleControl } from "./HeatmapScaleControl";
+import { HeatmapLookSettings } from "./HeatmapLookSettings";
+import { ReadingLabelSettings } from "./ReadingLabelSettings";
+import {
+  heatmapKey,
+  resolveHeatmapRange,
+  toDisplayRange,
+} from "@/lib/heatmap-scale";
+import HeatmapImage from "./HeatmapImage";
+import HeatmapModal from "./HeatmapModal";
+import { hasSpeedData } from "@/lib/measurement-mode";
+import { labelFontSize, pointValueText } from "@/lib/heatmap-label";
+import { accessPointName, drawAccessPointMarker } from "@/lib/access-points";
+
+const logger = getLogger("Heatmaps");
+
+const metricTitles: Record<MeasurementTestType, string> = {
+  signalStrength: "Signal strength",
+  snr: "Signal-to-noise ratio",
+  tcpDownload: "Download speed",
+  tcpUpload: "Upload speed",
+  udpDownload: "Fixed-rate download (UDP)",
+  udpUpload: "Fixed-rate upload (UDP)",
+};
+
+const propertyTitles: Record<keyof IperfTestProperty, string> = {
+  bitsPerSecond: "Speed (Mbps)",
+  jitterMs: "Jitter, delay variation (ms)",
+  lostPackets: "Lost packets",
+  retransmits: "Resent data (retransmits)",
+  packetsReceived: "Packets received",
+  signalStrength: "Signal",
+};
+
+const propertyNotes: Partial<Record<keyof IperfTestProperty, string>> = {
+  jitterMs: "fixed rate",
+  lostPackets: "fixed rate",
+  packetsReceived: "fixed rate",
+  retransmits: "download",
+};
+
+/** "Download speed (Mbps)", "Fixed-rate upload (UDP): lost packets" */
+function speedMapTitle(
+  metric: MeasurementTestType,
+  property: keyof IperfTestProperty,
+): string {
+  return property === "bitsPerSecond"
+    ? `${metricTitles[metric]} (Mbps)`
+    : `${metricTitles[metric]}: ${propertyTitles[property].toLowerCase()}`;
+}
+
+const getAvailableProperties = (
+  metric: MeasurementTestType,
+): (keyof IperfTestProperty)[] => {
+  switch (metric) {
+    case "tcpDownload":
+      return ["bitsPerSecond", "retransmits"];
+    case "tcpUpload":
+      return ["bitsPerSecond"];
+    case "udpDownload":
+    case "udpUpload":
+      return ["bitsPerSecond", "jitterMs", "lostPackets", "packetsReceived"];
+    default:
+      return [];
+  }
+};
+
+type Rendered = { src: string | null; count: number };
+
+/** Signal strength and SNR are one map each, not one per iperf property. */
+const singleMapProperty: Partial<Record<MeasurementTestType, HeatmapProperty>> =
+  {
+    signalStrength: "signalStrength",
+    snr: "snr",
+  };
+
+const singleMapTitles: Partial<Record<HeatmapProperty, string>> = {
+  signalStrength: "Signal strength (%)",
+  snr: "Signal-to-noise ratio (dB)",
+};
+
+type HeatmapDatum = {
+  x: number;
+  y: number;
+  value: number;
+  /** The value whose colour the floor plan gives this point's dot. */
+  signalStrength: number;
+};
+
+/** Draw each measurement's value over the spot where it was taken. */
+function drawPointValues(
+  ctx: CanvasRenderingContext2D,
+  data: HeatmapDatum[],
+  metric: MeasurementTestType,
+  property: HeatmapProperty,
+  asPercentage: boolean,
+  offsetX: number,
+  offsetY: number,
+  fontPx: number,
+  gradient: Gradient,
+  scale: number,
+  backgroundOpacity: number,
+  textColor: string,
+) {
+  const font = labelFontSize(fontPx, scale);
+  const padX = Math.round(font * 0.4);
+  const padY = Math.round(font * 0.2);
+  ctx.save();
+  ctx.font = `600 ${font}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const { x, y, value, signalStrength } of data) {
+    const text = pointValueText(value, metric, property, asPercentage);
+    const width = ctx.measureText(text).width + padX * 2;
+    const height = font + padY * 2;
+    const cx = offsetX + x;
+    const cy = offsetY + y;
+    const dotColour = getColorAt(signalStrength / 100, gradient);
+    ctx.fillStyle = objectToRGBAString({ ...dotColour, a: backgroundOpacity });
+    ctx.beginPath();
+    ctx.roundRect(cx - width / 2, cy - height / 2, width, height, height / 2);
+    ctx.fill();
+    ctx.fillStyle = textColor;
+    ctx.fillText(text, cx, cy);
+  }
+  ctx.restore();
+}
+
+/**
+ * Heatmaps - renders one heat map per selected metric/property
+ * (WebGL inverse-distance weighting, see docs/dev/architecture.md).
+ */
+export function Heatmaps() {
+  const { settings, updateSettings } = useSettings();
+  const points = settings.surveyPoints;
+  // The memoization from here to renderHeatmap is on purpose, not for speed:
+  // renderCache below is keyed on renderHeatmap's identity, so it must change
+  // exactly when something that changes the pictures does. Editing one map's
+  // colour scale must not redraw the others (an e2e test checks this).
+  const enabledPoints = useMemo(
+    () => points.filter((p) => p.isEnabled),
+    [points],
+  );
+  // SNR needs a noise reading, which only some platforms report
+  const hasNoise = points.some((p) => snrOf(p.wifiData) !== null);
+  // Speed maps only make sense once a point has a speed reading
+  const hasSpeed = points.some(hasSpeedData);
+
+  const [heatmaps, setHeatmaps] = useState<
+    Partial<Record<HeatmapKey, Rendered>>
+  >({});
+  const [rendering, setRendering] = useState(false);
+  const [enlarged, setEnlarged] = useState<{ src: string; alt: string } | null>(
+    null,
+  );
+
+  const [selectedMetrics, setSelectedMetrics] = useState<MeasurementTestType[]>(
+    ["signalStrength"],
+  );
+  const [selectedProperties, setSelectedProperties] = useState<
+    (keyof IperfTestProperty)[]
+  >(["bitsPerSecond"]);
+  const [asPercentage, setAsPercentage] = useState(true);
+
+  const autoRadius = Math.round(calculateRadiusByBoundingBox(enabledPoints));
+  const radius = settings.radiusDivider ?? autoRadius;
+
+  /* ---------- data ---------- */
+
+  const getMetricValue = useCallback(
+    (
+      point: SurveyPoint,
+      metric: MeasurementTestType,
+      property?: HeatmapProperty,
+    ): number | null => {
+      if (metric === "signalStrength") {
+        // the map is always drawn in %, the legend may show dBm
+        return point.wifiData.signalStrength;
+      }
+      if (metric === "snr") {
+        // only points that have both an RSSI and a noise reading
+        return snrOf(point.wifiData);
+      }
+      const test = point.iperfData?.[metric];
+      if (!test) return null; // test not run (a measured 0 is a value)
+      const v =
+        property && property !== "snr" ? test[property] : test.bitsPerSecond;
+      return typeof v === "number" && Number.isFinite(v) ? v : null;
+    },
+    [],
+  );
+
+  const generateHeatmapData = useCallback(
+    (metric: MeasurementTestType, property?: HeatmapProperty) =>
+      enabledPoints
+        .map((p) => {
+          const value = getMetricValue(p, metric, property);
+          return value === null
+            ? null
+            : {
+                x: p.x,
+                y: p.y,
+                value,
+                signalStrength: p.wifiData.signalStrength,
+              };
+        })
+        .filter((v): v is HeatmapDatum => v !== null),
+    [enabledPoints, getMetricValue],
+  );
+
+  /* ---------- drawing ---------- */
+
+  const drawLegend = useCallback(
+    (
+      ctx: CanvasRenderingContext2D,
+      x: number,
+      y: number,
+      barWidth: number,
+      height: number,
+      min: number,
+      max: number,
+      metric: MeasurementTestType,
+      property: HeatmapProperty,
+      fontPx: number,
+    ) => {
+      for (let i = 0; i < height; i++) {
+        const normalized = (height - i) / height;
+        ctx.fillStyle = objectToRGBAString({
+          ...getColorAt(normalized, settings.gradient),
+          a: 1,
+        });
+        ctx.fillRect(x, y + i, barWidth, 1);
+      }
+      ctx.strokeStyle = "rgba(20,24,33,0.25)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, barWidth - 1, height - 1);
+
+      const ticks = 5;
+      ctx.fillStyle = "#14181f";
+      ctx.font = `${fontPx}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      for (let i = 0; i <= ticks; i++) {
+        const ty = y + (height * i) / ticks;
+        const value = max - ((max - min) * i) / ticks;
+        ctx.beginPath();
+        ctx.moveTo(x + barWidth, ty);
+        ctx.lineTo(x + barWidth + fontPx * 0.5, ty);
+        ctx.strokeStyle = "rgba(20,24,33,0.6)";
+        ctx.stroke();
+        ctx.fillText(
+          metricFormatter(
+            metric === "signalStrength" && !asPercentage
+              ? percentageToRssi(value)
+              : value,
+            metric,
+            property,
+            asPercentage,
+          ),
+          x + barWidth + fontPx * 0.8,
+          ty,
+        );
+      }
+    },
+    [settings.gradient, asPercentage],
+  );
+
+  const renderHeatmap = useCallback(
+    async (
+      metric: MeasurementTestType,
+      property: HeatmapProperty,
+      valueRange: HeatmapRange,
+    ): Promise<Rendered> => {
+      const W = settings.dimensions.width;
+      const H = settings.dimensions.height;
+      if (W <= 1 || H <= 1) return { src: null, count: 0 };
+
+      const data = generateHeatmapData(metric, property);
+      if (metric !== "signalStrength" && data.length === 0) {
+        return { src: null, count: 0 };
+      }
+
+      // legend + caption sized relative to the plan
+      const fontPx = Math.max(13, Math.round(Math.min(W, H) * 0.022));
+      const legendBar = Math.round(fontPx * 1.8);
+      const legendWidth = legendBar + fontPx * 7;
+      const captionH = Math.round(fontPx * 2.2);
+      // A reading label is centred on its point, so leave room for half of
+      // the widest one before the floor plan (and legend) begins.
+      let margin = Math.round(fontPx * 1.2);
+      if (settings.showPointValues) {
+        const measure = document.createElement("canvas").getContext("2d");
+        if (measure) {
+          const font = labelFontSize(fontPx, settings.pointValueScale);
+          measure.font = `600 ${font}px ui-sans-serif, system-ui, sans-serif`;
+          const widest = data.reduce((max, point) => {
+            const text = pointValueText(
+              point.value,
+              metric,
+              property,
+              asPercentage,
+            );
+            return Math.max(max, measure.measureText(text).width);
+          }, 0);
+          const padX = Math.round(font * 0.4);
+          margin = Math.max(margin, Math.ceil(widest / 2 + padX + 2));
+        }
+      }
+
+      const out = document.createElement("canvas");
+      out.width = W + margin * 2 + legendWidth;
+      out.height = H + margin * 2 + captionH;
+      const ctx = out.getContext("2d");
+      if (!ctx) {
+        logger.error("Failed to get 2D context");
+        return { src: null, count: 0 };
+      }
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, out.width, out.height);
+
+      const glCanvas = document.createElement("canvas");
+      glCanvas.width = W;
+      glCanvas.height = H;
+      try {
+        const renderer = createHeatmapWebGLRenderer(
+          glCanvas,
+          data,
+          settings.gradient,
+        );
+        await renderer.render({
+          points: data,
+          valueRange,
+          influenceRadius: radius,
+          maxOpacity: settings.maxOpacity,
+          minOpacity: settings.minOpacity,
+          backgroundImageSrc: settings.floorplanImagePath,
+          width: W,
+          height: H,
+        });
+      } catch (err) {
+        logger.error(`WebGL render failed: ${err}`);
+        return { src: null, count: data.length };
+      }
+      ctx.drawImage(glCanvas, margin, margin);
+      ctx.strokeStyle = "rgba(20,24,33,0.15)";
+      ctx.strokeRect(margin + 0.5, margin + 0.5, W - 1, H - 1);
+
+      if (settings.showPointValues) {
+        drawPointValues(
+          ctx,
+          data,
+          metric,
+          property,
+          asPercentage,
+          margin,
+          margin,
+          fontPx,
+          settings.gradient,
+          settings.pointValueScale,
+          settings.pointValueOpacity,
+          settings.pointValueColor,
+        );
+      }
+
+      // where the access points are, for reference (not measurements)
+      const apSize = fontPx * 1.7;
+      for (const ap of settings.accessPoints) {
+        drawAccessPointMarker(ctx, margin + ap.x, margin + ap.y, apSize, {
+          label: accessPointName(ap),
+          font: Math.round(fontPx * 0.8),
+        });
+      }
+
+      drawLegend(
+        ctx,
+        margin + W + margin,
+        margin,
+        legendBar,
+        H,
+        valueRange.min,
+        valueRange.max,
+        metric,
+        property,
+        fontPx,
+      );
+
+      // caption so a downloaded image explains itself
+      const title =
+        metric === "signalStrength"
+          ? `Signal strength (${asPercentage ? "%" : "dBm"})`
+          : property === "snr"
+            ? "Signal-to-noise ratio (dB)"
+            : speedMapTitle(metric, property);
+      ctx.fillStyle = "#14181f";
+      ctx.font = `600 ${fontPx}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(title, margin, margin + H + captionH / 2 + margin / 2);
+      ctx.fillStyle = "#6b7280";
+      ctx.font = `${fontPx * 0.85}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = "right";
+      const when = data.length
+        ? new Date(
+            Math.max(...enabledPoints.map((p) => p.timestamp)),
+          ).toLocaleDateString()
+        : "";
+      ctx.fillText(
+        `${settings.floorplanImageName}   ${data.length} point${data.length === 1 ? "" : "s"}   ${when}`,
+        margin + W,
+        margin + H + captionH / 2 + margin / 2,
+      );
+
+      return { src: out.toDataURL(), count: data.length };
+    },
+    [
+      settings.dimensions,
+      settings.gradient,
+      settings.maxOpacity,
+      settings.minOpacity,
+      settings.showPointValues,
+      settings.pointValueScale,
+      settings.pointValueOpacity,
+      settings.pointValueColor,
+      settings.floorplanImagePath,
+      settings.floorplanImageName,
+      settings.accessPoints,
+      generateHeatmapData,
+      drawLegend,
+      radius,
+      asPercentage,
+      enabledPoints,
+    ],
+  );
+
+  const wanted = useMemo(() => {
+    const list: {
+      key: HeatmapKey;
+      metric: MeasurementTestType;
+      property: HeatmapProperty;
+      title: string;
+    }[] = [];
+    for (const metric of selectedMetrics) {
+      const single = singleMapProperty[metric];
+      if (single) {
+        if (single === "snr" && !hasNoise) continue;
+        list.push({
+          key: heatmapKey(metric, single),
+          metric,
+          property: single,
+          title: metricTitles[metric],
+        });
+      } else {
+        if (!hasSpeed) continue;
+        for (const property of selectedProperties) {
+          if (getAvailableProperties(metric).includes(property)) {
+            list.push({
+              key: heatmapKey(metric, property),
+              metric,
+              property,
+              title: speedMapTitle(metric, property),
+            });
+          }
+        }
+      }
+    }
+    return list;
+  }, [selectedMetrics, selectedProperties, hasNoise, hasSpeed]);
+
+  // Keep in-flight results as well as completed maps, so editing one scale
+  // doesn't restart unchanged maps while their background images load.
+  const renderCache = useRef<{
+    renderer: typeof renderHeatmap;
+    maps: Partial<
+      Record<
+        HeatmapKey,
+        { min: number; max: number; result: Promise<Rendered> }
+      >
+    >;
+  }>({ renderer: renderHeatmap, maps: {} });
+
+  useEffect(() => {
+    let cancelled = false;
+    if (renderCache.current.renderer !== renderHeatmap) {
+      renderCache.current = { renderer: renderHeatmap, maps: {} };
+    }
+    const cache = renderCache.current.maps;
+    (async () => {
+      setRendering(true);
+      const next: Record<string, Rendered> = {};
+      for (const w of wanted) {
+        const range = resolveHeatmapRange(
+          w.property,
+          generateHeatmapData(w.metric, w.property).map((p) => p.value),
+          settings.heatmapRanges?.[w.key],
+        );
+        let entry = cache[w.key];
+        if (!entry || entry.min !== range.min || entry.max !== range.max) {
+          entry = {
+            ...range,
+            result: renderHeatmap(w.metric, w.property, range),
+          };
+          cache[w.key] = entry;
+        }
+        next[w.key] = await entry.result;
+        if (cancelled) return;
+      }
+      setHeatmaps(next);
+      setRendering(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [wanted, renderHeatmap, generateHeatmapData, settings.heatmapRanges]);
+
+  const updateScale = (key: HeatmapKey, scale: HeatmapScale) => {
+    updateSettings((previous) => ({
+      heatmapRanges: { ...previous.heatmapRanges, [key]: scale },
+    }));
+  };
+
+  /* ---------- controls ---------- */
+
+  const toggleMetric = (metric: MeasurementTestType) =>
+    setSelectedMetrics((prev) =>
+      (prev.includes(metric)
+        ? prev.filter((m) => m !== metric)
+        : [...prev, metric]
+      ).sort(
+        (a, b) =>
+          Object.keys(testTypes).indexOf(a) - Object.keys(testTypes).indexOf(b),
+      ),
+    );
+
+  const toggleProperty = (property: keyof IperfTestProperty) =>
+    setSelectedProperties((prev) =>
+      (prev.includes(property)
+        ? prev.filter((p) => p !== property)
+        : [...prev, property]
+      ).sort(
+        (a, b) =>
+          Object.keys(testProperties).indexOf(a) -
+          Object.keys(testProperties).indexOf(b),
+      ),
+    );
+
+  const anyIperfSelected =
+    hasSpeed && selectedMetrics.some((m) => !singleMapProperty[m]);
+
+  const checkboxRow = (
+    id: string,
+    label: string,
+    checked: boolean,
+    onChange: () => void,
+    note?: string,
+    disabled = false,
+  ) => (
+    <label
+      key={id}
+      htmlFor={id}
+      className={cn(
+        "flex items-center gap-2.5 rounded-md py-1 text-sm",
+        disabled
+          ? "cursor-not-allowed text-muted-foreground"
+          : "cursor-pointer",
+      )}
+    >
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={onChange}
+        disabled={disabled}
+      />
+      <span>{label}</span>
+      {note && (
+        <span className="ml-auto text-xs text-muted-foreground">{note}</span>
+      )}
+    </label>
+  );
+
+  /* ---------- render ---------- */
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-lg font-semibold">Heat maps</h1>
+        <p className="text-sm text-muted-foreground">
+          Adjust the radius until the spots grow together, then download the
+          maps you need.
+        </p>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <aside className="space-y-6 lg:sticky lg:top-30 lg:self-start">
+          <div>
+            <h2 className="mb-1.5 text-sm font-medium">Show</h2>
+            {Object.values(testTypes)
+              .filter((metric) => singleMapProperty[metric])
+              .map((metric) => {
+                const unavailable = metric === "snr" && !hasNoise;
+                return checkboxRow(
+                  `metric-${metric}`,
+                  metricTitles[metric],
+                  selectedMetrics.includes(metric) && !unavailable,
+                  () => toggleMetric(metric),
+                  undefined,
+                  unavailable,
+                );
+              })}
+            {!hasNoise && points.length > 0 && (
+              <p
+                className="mt-1 text-xs text-muted-foreground"
+                data-testid="snr-unavailable"
+              >
+                Signal-to-noise ratio needs noise readings. macOS and some Linux
+                Wi-Fi drivers report them; Windows does not.
+              </p>
+            )}
+            {hasSpeed ? (
+              <>
+                <h3 className="mb-1 mt-3 text-xs font-medium text-muted-foreground">
+                  Speed
+                </h3>
+                {Object.values(testTypes)
+                  .filter((metric) => !singleMapProperty[metric])
+                  .map((metric) =>
+                    checkboxRow(
+                      `metric-${metric}`,
+                      metricTitles[metric],
+                      selectedMetrics.includes(metric),
+                      () => toggleMetric(metric),
+                    ),
+                  )}
+              </>
+            ) : (
+              points.length > 0 && (
+                <p
+                  className="mt-3 text-xs text-muted-foreground"
+                  data-testid="speed-maps-off"
+                >
+                  {settings.measureSpeed
+                    ? "Speed maps appear once a point has a speed reading. None has one yet: check the speed setup in "
+                    : "This survey measures signal only. To add speed maps, choose Signal and speed in "}
+                  <a href="#settings" className="prose-link">
+                    Settings
+                  </a>
+                  .
+                </p>
+              )
+            )}
+          </div>
+
+          {anyIperfSelected && (
+            <div>
+              <h2 className="mb-1.5 text-sm font-medium">Speed detail</h2>
+              {Object.values(testProperties)
+                .filter((p) => p !== "signalStrength")
+                .map((property) =>
+                  checkboxRow(
+                    `property-${property}`,
+                    propertyTitles[property],
+                    selectedProperties.includes(property),
+                    () => toggleProperty(property),
+                    propertyNotes[property],
+                  ),
+                )}
+            </div>
+          )}
+
+          <Accordion type="single" collapsible>
+            <AccordionItem value="scales" className="border-b-0">
+              <AccordionTrigger
+                className="py-0 text-sm font-medium"
+                data-testid="colour-scales-toggle"
+              >
+                Colour scales
+              </AccordionTrigger>
+              <AccordionContent
+                className="space-y-4 pt-3"
+                aria-label="Colour scale settings"
+              >
+                {selectedMetrics.map((metric) => {
+                  const maps = wanted.filter((w) => w.metric === metric);
+                  if (!maps.length) return null;
+                  return (
+                    <div key={metric} className="space-y-3">
+                      <h3 className="text-xs font-medium text-muted-foreground">
+                        {metricTitles[metric]}
+                      </h3>
+                      {maps.map((w) => (
+                        <HeatmapScaleControl
+                          key={`${settings.floorplanImageName}-${w.key}`}
+                          mapKey={w.key}
+                          property={w.property}
+                          title={
+                            singleMapTitles[w.property] ??
+                            propertyTitles[
+                              w.property as keyof IperfTestProperty
+                            ]
+                          }
+                          label={singleMapTitles[w.property] ?? w.title}
+                          scale={settings.heatmapRanges?.[w.key]}
+                          automaticRange={toDisplayRange(
+                            w.property,
+                            resolveHeatmapRange(
+                              w.property,
+                              generateHeatmapData(metric, w.property).map(
+                                (p) => p.value,
+                              ),
+                            ),
+                          )}
+                          onChange={updateScale}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+
+          <HeatmapLookSettings />
+
+          <ReadingLabelSettings />
+
+          <HeatmapSlider
+            value={radius}
+            isAuto={settings.radiusDivider === null}
+            onChange={(r) => updateSettings({ radiusDivider: r })}
+            onReset={() => updateSettings({ radiusDivider: null })}
+          />
+
+          {selectedMetrics.includes("signalStrength") && (
+            <label className="flex items-center gap-2.5 text-sm">
+              <Switch
+                id="signal-strength-percentage"
+                checked={asPercentage}
+                onCheckedChange={setAsPercentage}
+              />
+              Signal legend in {asPercentage ? "percent" : "dBm"}
+            </label>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            {enabledPoints.length} of {points.length} point
+            {points.length === 1 ? "" : "s"} used
+            {rendering ? ", rendering" : ""}
+          </p>
+        </aside>
+
+        <div
+          className={cn(
+            "grid gap-5",
+            wanted.length <= 1
+              ? "grid-cols-1"
+              : "md:grid-cols-2 2xl:grid-cols-3",
+          )}
+          data-testid="heatmap-gallery"
+        >
+          {points.length === 0 && (
+            <EmptyTile
+              title="No measurements yet"
+              body="Take a few measurements on the Floor plan tab and the heat maps appear here."
+            />
+          )}
+          {wanted.map((w) => {
+            const r = heatmaps[w.key];
+            if (points.length === 0) return null;
+            if (!r) return <SkeletonTile key={w.key} title={w.title} />;
+            if (!r.src) {
+              return (
+                <EmptyTile
+                  key={w.key}
+                  title={w.title}
+                  body={
+                    w.metric === "signalStrength"
+                      ? "Could not render this map."
+                      : w.metric === "snr"
+                        ? "None of the points in use has a noise reading."
+                        : "None of the points in use has this measurement."
+                  }
+                />
+              );
+            }
+            return (
+              <figure
+                key={w.key}
+                className="space-y-1.5"
+                data-testid={`heatmap-${w.key}`}
+              >
+                <HeatmapImage
+                  src={r.src}
+                  alt={w.title}
+                  onClick={() => setEnlarged({ src: r.src!, alt: w.title })}
+                />
+                <figcaption className="flex items-baseline justify-between text-sm">
+                  <span className="font-medium">{w.title}</span>
+                  <span className="tabular text-xs text-muted-foreground">
+                    {r.count} point{r.count === 1 ? "" : "s"}
+                  </span>
+                </figcaption>
+              </figure>
+            );
+          })}
+        </div>
+      </div>
+
+      <HeatmapModal
+        src={enlarged?.src ?? ""}
+        alt={enlarged?.alt ?? ""}
+        open={enlarged !== null}
+        onClose={() => setEnlarged(null)}
+      />
+    </div>
+  );
+}
+
+function EmptyTile({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="flex aspect-4/3 flex-col items-start justify-end rounded-md border border-dashed p-4">
+      <p className="text-sm font-medium">{title}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+    </div>
+  );
+}
+
+function SkeletonTile({ title }: { title: string }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="aspect-4/3 animate-pulse rounded-md border bg-muted" />
+      <p className="text-sm font-medium">{title}</p>
+    </div>
+  );
+}

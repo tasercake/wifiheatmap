@@ -1,0 +1,148 @@
+/**
+ * server-paths.ts - where wifi-heatmapper keeps its files on disk.
+ *
+ * All user data lives under one data directory (default: ./data):
+ *
+ *   data/surveys/<floorplan>.json   survey points + settings per floor plan
+ *   data/media/<floorplan image>    uploaded floor plan images
+ *   data/usage-counts.json          this computer's usage counts setting and
+ *                                   random install id (telemetry.ts)
+ *
+ * Set WIFI_HEATMAPPER_DATA_DIR to move the whole directory (used by the
+ * e2e tests so they never touch a developer's real surveys).
+ *
+ * Files that ship with the app (bundled floor plans, localization tables) are
+ * read from the resources dir: the repo checkout (process.cwd()) normally, or
+ * WIFI_HEATMAPPER_RESOURCES_DIR, which the desktop app sets to its bundled,
+ * read-only server directory. Nothing is ever written there.
+ */
+import path from "path";
+
+export function getDataDir(): string {
+  const configured = process.env.WIFI_HEATMAPPER_DATA_DIR;
+  return configured
+    ? path.resolve(configured)
+    : path.join(process.cwd(), "data");
+}
+
+export function getSurveysDir(): string {
+  return path.join(getDataDir(), "surveys");
+}
+
+export function getMediaDir(): string {
+  return path.join(getDataDir(), "media");
+}
+
+/**
+ * This computer's usage counts state: the on/off setting, the random
+ * install id and when an event was last sent. Not part of any survey.
+ */
+export function getUsageCountsPath(): string {
+  return path.join(getDataDir(), "usage-counts.json");
+}
+
+/** Where the files that ship with the app live (read-only). */
+export function getResourcesDir(): string {
+  const configured = process.env.WIFI_HEATMAPPER_RESOURCES_DIR;
+  return configured ? path.resolve(configured) : process.cwd();
+}
+
+/** Floor plans bundled with the app, copied into the media dir on first start. */
+export function getBundledFloorplansDir(): string {
+  return path.join(getResourcesDir(), "assets", "floorplans");
+}
+
+/**
+ * Surveys bundled with the app (the demo plan's sample points), copied into
+ * the surveys dir when that floor plan has no survey yet.
+ */
+export function getBundledSurveysDir(): string {
+  return path.join(getResourcesDir(), "assets", "surveys");
+}
+
+/** Versions before 0.5.0 stored uploads here; they are migrated on start. */
+export function getLegacyMediaDir(): string {
+  return path.join(process.cwd(), "public", "media");
+}
+
+export function getLocalizationDir(): string {
+  return path.join(getResourcesDir(), "data", "localization");
+}
+
+export const MACOS_HELPER_APP = "WiFiHeatmapperHelper.app";
+export const MACOS_HELPER_BINARY = "WiFiHeatmapperHelper";
+
+/**
+ * Where to look for the macOS Wi-Fi helper (native/macos-wifi-helper), in
+ * order of preference. Each entry is a .app bundle path, or the executable
+ * itself when WIFI_HEATMAPPER_MACOS_HELPER points at one.
+ *
+ *  1. WIFI_HEATMAPPER_MACOS_HELPER - explicit override
+ *  2. $WIFI_HEATMAPPER_RESOURCES_DIR/helpers/ - set by the desktop app
+ *  3. native/macos-wifi-helper/build/ - `npm run build:macos-helper`
+ */
+export function getMacosHelperCandidates(): string[] {
+  const out: string[] = [];
+  const explicit = process.env.WIFI_HEATMAPPER_MACOS_HELPER;
+  if (explicit) out.push(path.resolve(explicit));
+  const resources = process.env.WIFI_HEATMAPPER_RESOURCES_DIR;
+  if (resources) {
+    out.push(path.resolve(resources, "helpers", MACOS_HELPER_APP));
+  }
+  out.push(
+    path.join(
+      process.cwd(),
+      "native",
+      "macos-wifi-helper",
+      "build",
+      MACOS_HELPER_APP,
+    ),
+  );
+  return out;
+}
+
+/**
+ * Only allow plain file names (no path separators, no traversal, no dotfiles).
+ * Returns null when the name is not acceptable.
+ */
+export function safeFileName(name: string): string | null {
+  if (!name) return null;
+  const base = path.basename(name);
+  if (base !== name) return null;
+  if (base === "." || base === ".." || base.startsWith(".")) return null;
+  if (/[\\/\0]/.test(base)) return null;
+  return base;
+}
+
+export const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp)$/i;
+
+export function isImageFileName(name: string): boolean {
+  return IMAGE_EXTENSIONS.test(name);
+}
+
+/**
+ * Normalize an uploaded file name: keep letters, digits, space, dot, dash and
+ * underscore; collapse anything else to "_".
+ */
+export function normalizeUploadName(name: string): string | null {
+  const base = path.basename(name).trim();
+  const cleaned = base.replace(/[^A-Za-z0-9 ._-]/g, "_").replace(/\s+/g, " ");
+  return safeFileName(cleaned);
+}
+
+export function contentTypeFor(name: string): string {
+  const ext = path.extname(name).toLowerCase();
+  switch (ext) {
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+export { mediaUrlFor } from "./media-url";

@@ -1,0 +1,312 @@
+# Contributing to wifi-heatmapper
+
+Thanks for helping. Issues and pull requests are reviewed regularly.
+First-time contributor? Look for the
+[good first issue](https://github.com/hnykda/wifi-heatmapper/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22)
+label.
+
+## Set up
+
+```bash
+git clone https://github.com/hnykda/wifi-heatmapper.git
+cd wifi-heatmapper
+npm install
+npm run dev:mock     # http://localhost:3000, synthetic measurements
+```
+
+`dev:mock` runs the app with `WIFI_HEATMAPPER_MOCK=1`: Wi-Fi and iperf3
+results are made up, so you can click around on any machine without a sudo
+password, an iperf3 server, or even a Wi-Fi card. Use `npm run dev` for real
+measurements.
+
+Node 22.12 or newer is required (CI, the Docker image and the desktop app use Node 26).
+
+## Everyday commands
+
+| Command              | What it does                                              |
+| -------------------- | --------------------------------------------------------- |
+| `npm run dev`        | Real measurements on this machine                         |
+| `npm run dev:mock`   | Synthetic measurements, works everywhere                  |
+| `npm run verify`     | Lint, type check and unit tests (what CI runs first)      |
+| `npm run e2e`        | Playwright end-to-end tests against a mock-mode server    |
+| `npm run e2e:ui`     | The same tests with Playwright's UI for debugging         |
+| `npm run lint`       | oxlint with auto-fix, then Prettier formats the code      |
+| `npm run test:watch` | Vitest in watch mode                                      |
+| `npm run build`      | Production build (`npm start` serves it)                  |
+
+`npm run check` (the first part of `verify`) runs [oxlint](https://oxc.rs)
+with the rules in `.oxlintrc.json` and `prettier --check` on `src`,
+`__tests__` and `e2e`. Warnings don't fail it; errors do.
+
+The app is built with the [React Compiler](https://react.dev/learn/react-compiler),
+which memoizes components and hooks. Don't add `useMemo`, `useCallback` or
+`React.memo` for speed; keep them only where an identity matters on purpose
+(the comment in `Heatmaps.tsx` explains its case). For values an effect
+reads but shouldn't re-run for, use `useEffectEvent`. The build fails if
+the compiler has to skip a component (`panicThreshold: "all_errors"` in
+`next.config.mjs`), and oxlint's compiler rules are errors, so most
+problems show up in `npm run check` already. Typical fixes: move
+`try`/`finally` and `throw` inside `try` out of the component into a
+plain async function, and derive state during render instead of copying
+props into state in an effect. `"use no memo"` opts one component out;
+say why in a comment.
+
+The first `npm run e2e` needs a browser: `npx playwright install chromium`.
+The e2e server uses port 3100 and its own build directory, so it can run
+while `npm run dev` is up. A server already listening on that port is reused,
+so when running e2e in two checkouts at once give each its own port:
+`E2E_PORT=3101 npm run e2e`.
+
+Set `LOG_LEVEL=2` (debug) or `LOG_LEVEL=1` (trace) to see every command the
+server runs and its output. Bug reports should include that log.
+
+### Working with a coding agent
+
+`CLAUDE.md` holds the project instructions for agents; `AGENTS.md` points to
+it and carries a block that `next dev` keeps up to date, telling agents to
+read the Next.js docs bundled in `node_modules/next/dist/docs/` (commit it if
+`next dev` changes it).
+
+`.mcp.json` registers [`next-devtools-mcp`](https://www.npmjs.com/package/next-devtools-mcp)
+for Claude Code and other MCP clients that read it. It connects to the
+`/_next/mcp` endpoint of a running `npm run dev` / `npm run dev:mock` and
+gives the agent the dev server's errors, routes, logs and compile results
+(without a full `npm run build`). It only exists in `next dev`. This is a
+tool for working on the code and has nothing to do with the app's own MCP
+server in `src/mcp/` (for users, see [docs/guide/mcp.md](docs/guide/mcp.md)).
+
+## Where things are
+
+```
+src/app/                Next.js app router: layout, page, API routes
+  api/status            what is running (version, OS, mock mode, iperf3)
+  api/media             floor plan images: list, upload, serve, delete
+  api/settings          survey files: read, change settings, list, delete
+  api/surveys           a survey's points: add, change, delete
+  api/start-task        start/stop a measurement job, or ask for its status
+  api/events            server-sent progress events, to every open tab
+  webGL/                heat map renderer (inverse-distance weighting)
+src/components/         React UI. layout/ has the shell; ui/ is shadcn/Radix
+src/lib/                shared code
+  wifiScanner-*.ts      one file per OS + wifiScanner-mock.ts; picked by wifiScanner.ts
+  measurement-job.ts    a measurement is a server job: one at a time, cancel, saves the point
+  iperfRunner.ts        the measurement sequence (wifi, TCP, wifi, UDP, wifi)
+  server-paths.ts       where data lives on disk
+  schema.ts             Zod schemas: the survey file (lenient) and API bodies (strict)
+  survey-store.ts       the only code that reads and writes survey files
+  types.ts              every shared type (survey types come from schema.ts)
+src/instrumentation.ts  runs once when the server starts (seeds floor plans, migrates old data)
+__tests__/              Vitest unit tests + fixtures of real command output
+e2e/                    Playwright tests
+assets/floorplans/      floor plans bundled with the app
+data/localization/      label tables for localized `netsh` output (Windows)
+docs/guide/             the user guide, also published on the website
+docs/dev/               architecture, desktop app, to-do
+site/                   the website (wifi-heatmapper.danielalder.cz), built from docs/guide
+```
+
+User data lives in `data/` (`surveys/*.json`, `media/*`). Set
+`WIFI_HEATMAPPER_DATA_DIR` to put it elsewhere; the e2e tests use `.e2e-data/`.
+
+## How a measurement works
+
+1. The browser POSTs the spot (survey, x, y) and the measurement settings
+   to `/api/start-task?action=start` and gets a job id (409 if one is
+   already running). Every open tab follows `/api/events`.
+2. The server's job (`measurement-job.ts`) runs `runSurveyTests()` in
+   `iperfRunner.ts`: preflight checks, then Wi-Fi, TCP tests, Wi-Fi, UDP
+   tests, Wi-Fi. Signal strength is the average of the three readings.
+   Cancel aborts the job's AbortController, which kills a running iperf3.
+3. The job saves the point to `data/surveys/<floor plan>.json` itself and
+   sends a `done` event with the point id; the browser reloads the survey.
+   A status poll by job id covers a dropped event stream.
+
+Platform code implements the `WifiActions` interface in `types.ts`. Parsers
+for command output are pure functions with fixtures under `__tests__/data`;
+when you add support for a new OS version or language, add a fixture and a
+test rather than a mock.
+
+## Writing e2e tests
+
+Specs in `e2e/` import `test` and `expect` from `./fixtures`, not from
+`@playwright/test`. That gives every test two things:
+
+- **Isolation.** Before each test the server goes back to a fresh start
+  (`DELETE /api/e2e/data`): no surveys, only the bundled floor plans, no
+  measurement running, no sudo password held, the normal mock. A test
+  never sees what an earlier one saved, so tests can run in any order,
+  and `uploadFloorplan()` gives you an empty survey with the default
+  settings. Usage counts settings are not reset.
+- **Scenarios.** The `mock` fixture makes the mock backend misbehave on
+  purpose:
+
+  ```ts
+  test("iperf3 missing", async ({ page, mock }) => {
+    await mock.set({ iperf: "missing" });
+    // ...measure, expect "Saved without speed"
+  });
+  ```
+
+  The fields are in `mockScenarioSchema` (`src/lib/schema.ts`): `wifi`
+  (`needs-sudo`, `wrong-sudo`, `not-connected`, `error`), `sudoPassword`,
+  `wifiMethod` (what the report says read the Wi-Fi, e.g.
+  `netsh-fallback`), `noise` (a number, or `null` for none), `signal` (a
+  fixed strength), `iperf` (`missing`, `unreachable`, `fails-midway`) and
+  `delayMs` (how long each step takes, for cancel tests). `set()` calls
+  add up; the scenario is reset after every test.
+
+The scenario only changes what the mock scanner and the mock iperf3 answer
+(`wifiScanner-mock.ts`, which prints iperf3's JSON). The preflight, speed
+test planning, the measurement job, saving and diagnostics are the real
+code, so make the mock fail rather than faking an API answer with
+`page.route()`. Keep `page.route()` for what mock mode can't be, such as
+another OS (`macos-helper.spec.ts`).
+
+The `/api/e2e/*` routes answer 404 unless the server runs with
+`WIFI_HEATMAPPER_MOCK=1`, `WIFI_HEATMAPPER_E2E=1` and its own
+`WIFI_HEATMAPPER_DATA_DIR` (the `e2e:serve:*` scripts), and never in the
+desktop app. If the fixtures report a 404, another server is on the e2e
+port: stop it or pick another `E2E_PORT`.
+
+**Wait for what your test started.** The app saves in the background
+(points one by one, settings after a short pause), so the screen is ahead
+of the file: wait with `readSurvey(page, name, until)` before reading,
+replacing or reloading. When a test ends, the `context` fixture flushes
+what the pages hold back and closes them only once their requests are
+answered. A request cut off halfway (a `page.reload()` in the middle of a
+save, say) makes `next dev` log an uncaught `Error: aborted`, and the run
+fails on any such error in the server's output: `e2e/serve.mjs` writes it
+to `.e2e-data/server.log` and `e2e/server-log.ts` checks it at the end.
+Before each test, the fixtures also check that the last test's pages left
+no `/api/events` stream open on the server.
+
+## Pull requests
+
+- Keep a PR to one topic. Open an issue first for larger changes.
+- Run `npm run verify` and `npm run e2e` before pushing; CI runs both.
+- Every PR needs evidence it works: automated tests where possible,
+  otherwise a screenshot or a short note about what you tried on which OS.
+  The PR template asks for this. It is also how we filter out untested,
+  auto-generated PRs.
+- Add a line to `CHANGELOG.md` under the unreleased version.
+- If you change something users see, update the page in `docs/guide/` that
+  describes it (usually `using-the-app.md`). The website is built from those
+  files on every push to `main`; see [site/README.md](site/README.md).
+
+## Windows localization
+
+`netsh wlan` prints localized labels. `data/localization/*.json` maps them to
+internal names. To add a language, copy `en-us-win11.json`, translate the
+keys (not the values), and add fixtures of your `netsh` output to
+`__tests__/data/` with a test in `__tests__/parsing/`. See issue #26.
+
+## Desktop app (development)
+
+The desktop app (see `docs/dev/desktop-app.md`) is the same server in a
+[Tauri](https://tauri.app) window. Everything for it lives in `desktop/`,
+which has its own `package.json` so the root `npm ci` stays lean. You need
+[Rust](https://rustup.rs) (stable) on top of Node. On Linux (Debian/Ubuntu)
+also Tauri's system libraries:
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  patchelf build-essential file libssl-dev
+```
+
+| Command                    | What it does                                                         |
+| -------------------------- | -------------------------------------------------------------------- |
+| `npm run desktop:dev`      | Assemble the server, open the app (debug build)                      |
+| `npm run desktop:dev:mock` | The same with `WIFI_HEATMAPPER_MOCK=1` (any env var is passed on)     |
+| `npm run desktop:build`    | Release build: `.app` + `.dmg` (Linux: `.AppImage` + `.deb`) in `desktop/src-tauri/target/release/bundle/` |
+| `npm run desktop:server`   | Only assemble `desktop/server/` (Next standalone build + Node)        |
+| `npm run desktop:smoke`    | Start `desktop/server/` read-only in mock mode and check it (CI runs this) |
+
+`desktop/build-server.mjs` builds Next with `output: "standalone"` into
+`.next-desktop/` and copies it, plus an official Node binary (pinned in that
+file, cached in `desktop/.cache/`), into `desktop/server/`. Every Tauri build
+runs it first, so the app never ships a stale server.
+
+How the app runs the server, and what the server can rely on:
+
+- `<resources>/server/node server-entry.mjs`, cwd `<resources>/server`
+  (read-only). `server-entry.mjs` exits when its stdin closes, so the server
+  never outlives the app, even if the app crashes.
+- `PORT` (a free port), `HOSTNAME=127.0.0.1`, `NODE_ENV=production`.
+- `WIFI_HEATMAPPER_DATA_DIR` = the app-data folder + `/data` (macOS:
+  `~/Library/Application Support/com.github.hnykda.wifi-heatmapper/data`;
+  Linux: `~/.local/share/com.github.hnykda.wifi-heatmapper/data`), unless you
+  already set it.
+- `WIFI_HEATMAPPER_RESOURCES_DIR` = `<resources>/server`: shipped, read-only
+  files (`assets/`, `data/localization/`, and on macOS
+  `helpers/WiFiHeatmapperHelper.app`).
+- `PATH` with `/opt/homebrew/bin` and `/usr/local/bin` added, so a Homebrew
+  `iperf3` is found when the app is opened from Finder (Linux: `/usr/local/bin`,
+  `/usr/sbin`, `/sbin`, for `iw`).
+- Inside an AppImage, none of the AppImage's `$APPDIR` library paths
+  (`LD_LIBRARY_PATH`, `GIO_MODULE_DIR`, ...): the tools the server runs use the
+  system's libraries.
+- Server output goes to `server.log` in the app's log folder (macOS:
+  `~/Library/Logs/com.github.hnykda.wifi-heatmapper/`; Linux:
+  `~/.local/share/com.github.hnykda.wifi-heatmapper/logs/`). If the server
+  stops, the window shows its last lines.
+
+Set `WIFI_HEATMAPPER_PORT` to pin the port while debugging. To run a built
+app in mock mode from a terminal:
+
+```bash
+WIFI_HEATMAPPER_MOCK=1 "desktop/src-tauri/target/release/bundle/macos/WiFi Heatmapper.app/Contents/MacOS/wifi-heatmapper"
+# Linux
+WIFI_HEATMAPPER_MOCK=1 desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+```
+
+`desktop/smoke-test-linux.sh <AppImage or /usr/bin/wifi-heatmapper>` starts
+the built Linux app under Xvfb in mock mode and checks it (CI runs it on both
+Linux release rows). Without a Linux machine, an `ubuntu:22.04` container
+with the packages above, Node 26 and rustup builds both packages (set
+`APPIMAGE_EXTRACT_AND_RUN=1`: containers have no FUSE).
+
+On macOS the build also compiles the Wi-Fi helper
+(`native/macos-wifi-helper`, needs `xcode-select --install`) into
+`desktop/server/helpers/`. By default it is ad-hoc signed: that works, but
+macOS forgets the helper's Location permission whenever it is rebuilt, so
+expect the "WiFi Heatmapper Helper would like to use your location" prompt
+after each build. Release builds sign it with the project's certificate
+(GitHub secrets), so users are asked only once. To build like a release,
+set `MACOS_HELPER_SIGN_IDENTITY` (and `MACOS_HELPER_SIGN_KEYCHAIN`); with the
+maintainer's `.p12`, `native/macos-wifi-helper/signing-keychain.sh` sets up a
+throwaway keychain for it. Steps in `native/macos-wifi-helper/README.md`,
+"Signing". Fork PRs get no secrets and build an ad-hoc helper.
+
+On Windows you also need the Rust MSVC toolchain (rustup's default) and
+Visual Studio Build Tools with "Desktop development with C++"; WebView2
+ships with Windows 10 and 11. The commands are the same.
+`npm run desktop:build` makes `bundle/nsis/*-setup.exe` (per-user install)
+and `bundle/msi/*.msi` (per-machine). What differs from macOS:
+
+- Data: `%LOCALAPPDATA%\com.github.hnykda.wifi-heatmapper\data` (local,
+  not roaming); log: `%LOCALAPPDATA%\com.github.hnykda.wifi-heatmapper\logs\server.log`.
+- `node.exe` runs without a console window, inside a Job Object
+  (`desktop/src-tauri/src/windows_job.rs`): quitting the app, or the app
+  dying, ends node.exe and everything it started (iperf3, netsh).
+- `PATH` gets the winget, Scoop and Chocolatey tool folders added.
+- `node desktop/smoke-test-app.mjs <path to wifi-heatmapper.exe>` checks a
+  built or installed app: server up, and no node.exe or child left after a
+  window close or a `taskkill /F`. release.yml runs it on both installers
+  with `desktop/smoke-test-windows-install.mjs` (installs, time limits, one
+  retry for a known runner flake).
+
+```powershell
+$env:WIFI_HEATMAPPER_MOCK=1; & "desktop\src-tauri\target\release\wifi-heatmapper.exe"
+```
+
+The icon comes from `desktop/app-icon.svg` (the header's mark):
+`npm --prefix desktop run icons` regenerates `desktop/src-tauri/icons/`.
+
+Pushing a `v*` tag (or running the Release workflow by hand) builds the app
+on GitHub and attaches it to a draft release; see `.github/workflows/release.yml`.
+
+## Releasing
+
+1. Bump `version` in `package.json` and finish the `CHANGELOG.md` entry.
+2. `npm run verify && npm run build && CI=1 npm run e2e`.
+3. Tag `vX.Y.Z` and create a GitHub release with the changelog section.

@@ -1,0 +1,123 @@
+"use client";
+import { useEffect, useState } from "react";
+import { Info } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { useAppStatus } from "@/hooks/useAppStatus";
+import { DialogClose } from "@/components/ui/dialog";
+import { openReport } from "@/components/help/report-store";
+
+const SITE = "https://wifi-heatmapper.danielalder.cz";
+
+/**
+ * Dispatched on `window` to open About. The desktop app's native
+ * "About WiFi Heatmapper" menu item sends it (desktop/src-tauri/src/main.rs).
+ */
+export const SHOW_ABOUT_EVENT = "wifi-heatmapper:show-about";
+
+/**
+ * About: what is running, where the data lives, where to get help.
+ * The same facts the server prints at start-up, for bug reports.
+ */
+export function AboutDialog() {
+  const status = useAppStatus();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener(SHOW_ABOUT_EVENT, show);
+    return () => window.removeEventListener(SHOW_ABOUT_EVENT, show);
+  }, []);
+
+  const rows: [string, string][] = status
+    ? [
+        ["Version", status.version],
+        ["Operating system", status.osName],
+        ["Node", status.nodeVersion],
+        ["iperf3", status.iperf3Version ?? "not installed"],
+        ["Data folder", status.dataDir],
+        ["Docker", status.docker ? "yes" : "no"],
+        ["Measurements", status.mockMode ? "mock (synthetic)" : "real"],
+        ...(status.platform === "darwin" && !status.mockMode
+          ? ([
+              [
+                "Wi-Fi helper",
+                status.macosHelper ?? "not built (uses wdutil and sudo)",
+              ],
+            ] as [string, string][])
+          : []),
+      ]
+    : [];
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="About Wi-Fi Heatmapper"
+          title="About"
+        >
+          <Info className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Wi-Fi Heatmapper</DialogTitle>
+          <DialogDescription>
+            Measures Wi-Fi signal strength, and optionally speed, where you
+            stand, and draws heat maps on your floor plan. Your surveys stay on
+            this computer.
+          </DialogDescription>
+        </DialogHeader>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
+          {rows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-muted-foreground">{k}</dt>
+              <dd className="break-all">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-sm text-muted-foreground">
+          Something not working?{" "}
+          <DialogClose asChild>
+            <button
+              type="button"
+              className="prose-link"
+              onClick={() => openReport()}
+              data-testid="about-report"
+            >
+              Report a problem
+            </button>
+          </DialogClose>
+          : it fills in these details for you. Read the{" "}
+          <a
+            className="prose-link"
+            href={`${SITE}/docs/using-the-app`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            user guide
+          </a>{" "}
+          or the{" "}
+          <a
+            className="prose-link"
+            href={`${SITE}/docs/faq`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            FAQ
+          </a>
+          .
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+}
